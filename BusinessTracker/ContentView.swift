@@ -4,20 +4,20 @@ import SwiftData
 struct ContentView: View {
     var body: some View {
         TabView {
-            Tab("Expenses", systemImage: "creditcard") {
-                ExpensesView()
+            Tab("Time", systemImage: "clock") {
+                TimeTrackingView()
             }
             Tab("Mileage", systemImage: "car") {
                 MileageView()
             }
-            Tab("Time", systemImage: "clock") {
-                TimeTrackingView()
-            }
-            Tab("Income", systemImage: "dollarsign.circle") {
-                IncomeView()
+            Tab("Expenses", systemImage: "creditcard") {
+                ExpensesView()
             }
             Tab("Reports", systemImage: "chart.bar") {
                 ReportsView()
+            }
+            Tab("Settings", systemImage: "gearshape") {
+                SettingsView()
             }
         }
     }

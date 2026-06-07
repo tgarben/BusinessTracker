@@ -11,8 +11,12 @@ final class MileageTrip {
     var purpose: String
     var notes: String
 
-    /// IRS standard mileage rate — update each tax year
-    static let ratePerMile: Double = 0.70
+    /// IRS standard mileage rate — stored in UserDefaults, editable in Settings
+    static let defaultRatePerMile: Double = 0.70
+    static var ratePerMile: Double {
+        let stored = UserDefaults.standard.double(forKey: "mileage_ratePerMile")
+        return stored > 0 ? stored : defaultRatePerMile
+    }
 
     var reimbursementAmount: Double { miles * MileageTrip.ratePerMile }
 

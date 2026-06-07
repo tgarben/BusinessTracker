@@ -213,26 +213,46 @@ private struct TimeEntryRow: View {
     let entry: TimeEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.client?.name ?? "No Client")
-                        .font(.subheadline.bold())
-                    if let project = entry.project {
-                        Text(project.name)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            // Client + hours badge
+            HStack(alignment: .center) {
+                Text(entry.client?.name ?? "Uncategorized")
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(String(format: "%.2f hrs", entry.hours))
-                        .font(.subheadline.bold())
-                    Text(entry.earnings.formatted(.currency(code: "USD")))
+                Text(String(format: "%.2f hrs", entry.hours))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.indigo)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.indigo.opacity(0.12), in: Capsule())
+            }
+
+            // Project + earnings
+            HStack(spacing: 10) {
+                VStack(spacing: 0) {
+                    Image(systemName: "briefcase.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.indigo.opacity(0.7))
+                }
+                .frame(width: 12)
+
+                if let project = entry.project {
+                    Text(project.name)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else {
+                    Text("No project")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
+
+                Spacer()
+
+                Text(entry.earnings.formatted(.currency(code: "USD")))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
             }
+
             if !entry.notes.isEmpty {
                 Text(entry.notes)
                     .font(.caption)
@@ -240,7 +260,7 @@ private struct TimeEntryRow: View {
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 }
 

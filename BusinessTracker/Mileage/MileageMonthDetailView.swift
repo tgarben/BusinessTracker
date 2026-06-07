@@ -30,6 +30,8 @@ struct MileageMonthDetailView: View {
         monthStart.formatted(.dateTime.month(.wide).year())
     }
 
+    @State private var editingTrip: MileageTrip?
+
     var body: some View {
         List {
             // Month summary at top
@@ -53,6 +55,8 @@ struct MileageMonthDetailView: View {
                 Section(header: Text(day, style: .date)) {
                     ForEach(grouped[day] ?? []) { trip in
                         TripRow(trip: trip)
+                            .contentShape(Rectangle())
+                            .onTapGesture { editingTrip = trip }
                     }
                     .onDelete { offsets in
                         deleteTrips(from: grouped[day] ?? [], at: offsets)
@@ -63,6 +67,9 @@ struct MileageMonthDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $editingTrip) { trip in
+            MileageTripEditView(trip: trip)
+        }
     }
 
     private func deleteTrips(from trips: [MileageTrip], at offsets: IndexSet) {

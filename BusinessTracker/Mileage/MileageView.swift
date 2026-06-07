@@ -7,6 +7,7 @@ struct MileageView: View {
 
     @State private var showLogTrip = false
     @State private var showHistory = false
+    @State private var editingTrip: MileageTrip?
 
     private var monthTrips: [MileageTrip] {
         let start = Calendar.current.startOfMonth(for: .now)
@@ -48,6 +49,8 @@ struct MileageView: View {
                         Section(header: Text(day, style: .date)) {
                             ForEach(grouped[day] ?? []) { trip in
                                 TripRow(trip: trip)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { editingTrip = trip }
                             }
                             .onDelete { offsets in
                                 deleteTrips(from: grouped[day] ?? [], at: offsets)
@@ -74,6 +77,9 @@ struct MileageView: View {
             }
             .sheet(isPresented: $showHistory) {
                 MileageHistoryView()
+            }
+            .sheet(item: $editingTrip) { trip in
+                MileageTripEditView(trip: trip)
             }
         }
     }
@@ -121,32 +127,51 @@ struct TripRow: View {
     let trip: MileageTrip
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        VStack(alignment: .leading, spacing: 8) {
+            // Purpose + miles badge
+            HStack(alignment: .center) {
                 Text(trip.purpose)
-                    .font(.subheadline.bold())
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
                 Text(String(format: "%.1f mi", trip.miles))
-                    .font(.subheadline.bold())
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.blue.opacity(0.12), in: Capsule())
             }
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Label(trip.startLocation, systemImage: "circle.fill")
+
+            // Route visualization
+            HStack(spacing: 10) {
+                // Icon column
+                VStack(spacing: 0) {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 7))
+                        .foregroundStyle(.green)
+                    Rectangle()
+                        .fill(.secondary.opacity(0.3))
+                        .frame(width: 1.5, height: 14)
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                }
+                // Labels column
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(trip.startLocation)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.green, .secondary)
-                    Label(trip.endLocation, systemImage: "mappin.circle.fill")
+                        .lineLimit(1)
+                    Text(trip.endLocation)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.red, .secondary)
+                        .lineLimit(1)
                 }
                 Spacer()
                 Text(trip.reimbursementAmount.formatted(.currency(code: "USD")))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
             }
+
             if !trip.notes.isEmpty {
                 Text(trip.notes)
                     .font(.caption)
@@ -154,7 +179,7 @@ struct TripRow: View {
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 }
 

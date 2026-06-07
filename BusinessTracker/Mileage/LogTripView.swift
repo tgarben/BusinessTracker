@@ -15,7 +15,8 @@ struct LogTripView: View {
     @State private var date: Date = .now
     @State private var purpose: String = ""
     @State private var notes: String = ""
-    @State private var ratePerMile: Double = MileageTrip.ratePerMile
+    @AppStorage("mileage_ratePerMile") private var savedRate: Double = MileageTrip.defaultRatePerMile
+    @State private var ratePerMile: Double = MileageTrip.defaultRatePerMile
     @State private var isRoundTrip = false
 
     // Address mode
@@ -138,6 +139,7 @@ struct LogTripView: View {
                         .disabled(!canSave)
                 }
             }
+            .onAppear { ratePerMile = savedRate }
             .sheet(isPresented: $showFromSearch) {
                 AddressSearchView(title: "From") { completion in
                     fromCompletion = completion
