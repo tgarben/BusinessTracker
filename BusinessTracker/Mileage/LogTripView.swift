@@ -16,6 +16,7 @@ struct LogTripView: View {
     @State private var purpose: String = ""
     @State private var notes: String = ""
     @State private var ratePerMile: Double = MileageTrip.ratePerMile
+    @State private var isRoundTrip = false
 
     // Address mode
     @State private var fromCompletion: MKLocalSearchCompletion?
@@ -33,8 +34,14 @@ struct LogTripView: View {
     @State private var manualEndLocation: String = ""
     @State private var manualMiles: Double = 0
 
-    private var resolvedMiles: Double {
+    /// One-way miles before round trip multiplier
+    private var oneWayMiles: Double {
         entryMode == .address ? (calculatedMiles ?? 0) : manualMiles
+    }
+
+    /// Final miles to save
+    private var totalMiles: Double {
+        oneWayMiles * (isRoundTrip ? 2 : 1)
     }
 
     private var resolvedStart: String {
@@ -45,14 +52,14 @@ struct LogTripView: View {
         entryMode == .address ? toLabel : manualEndLocation
     }
 
-    private var reimbursement: Double { resolvedMiles * ratePerMile }
+    private var reimbursement: Double { totalMiles * ratePerMile }
 
     private var canCalculate: Bool {
         fromCompletion != nil && toCompletion != nil && !isCalculating
     }
 
     private var canSave: Bool {
-        resolvedMiles > 0 && !resolvedStart.isEmpty && !resolvedEnd.isEmpty
+        totalMiles > 0 && !resolvedStart.isEmpty && !resolvedEnd.isEmpty
     }
 
     var body: some View {
@@ -63,7 +70,6 @@ struct LogTripView: View {
                     TextField("Purpose (e.g. Client visit)", text: $purpose)
                 }
 
-                // Distance entry section with mode toggle at top
                 Section("Distance") {
                     Picker("Entry Mode", selection: $entryMode) {
                         ForEach(MileageEntryMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -75,24 +81,38 @@ struct LogTripView: View {
                     }
 
                     switch entryMode {
-                    case .address:
-                        addressFields
+                    case .address: addressFields
+                    case .manual:  manualFields
+                    }
 
-                    case .manual:
-                        manualFields
+                    // Round trip toggle — shown once we have a distance
+                    if oneWayMiles > 0 {
+                        Toggle(isOn: $isRoundTrip) {
+                            Label("Round Trip", systemImage: "arrow.triangle.2.circlepath")
+                        }
+
+                        if isRoundTrip {
+                            LabeledContent("Each Way") {
+                                Text("\(oneWayMiles.formatted(.number.precision(.fractionLength(2)))) mi")
+                                    .foregroundStyle(.secondary)
+                            }
+                            LabeledContent("Total") {
+                                Text("\(totalMiles.formatted(.number.precision(.fractionLength(2)))) mi")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
 
-                // Rate & reimbursement
                 Section("Reimbursement") {
                     LabeledContent("Rate per Mile") {
                         TextField("0.000", value: $ratePerMile, format: .number.precision(.fractionLength(3)))
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
                     }
-                    if resolvedMiles > 0 {
+                    if totalMiles > 0 {
                         LabeledContent("Miles") {
-                            Text(resolvedMiles, format: .number.precision(.fractionLength(2)))
+                            Text("\(totalMiles.formatted(.number.precision(.fractionLength(2)))) mi")
                                 .foregroundStyle(.secondary)
                         }
                         LabeledContent("Reimbursement") {
@@ -141,10 +161,7 @@ struct LogTripView: View {
 
     @ViewBuilder
     private var addressFields: some View {
-        // From
-        Button {
-            showFromSearch = true
-        } label: {
+        Button { showFromSearch = true } label: {
             LabeledContent("From") {
                 Text(fromLabel.isEmpty ? "Search address…" : fromLabel)
                     .foregroundStyle(fromLabel.isEmpty ? .tertiary : .primary)
@@ -154,10 +171,7 @@ struct LogTripView: View {
         }
         .foregroundStyle(.primary)
 
-        // To
-        Button {
-            showToSearch = true
-        } label: {
+        Button { showToSearch = true } label: {
             LabeledContent("To") {
                 Text(toLabel.isEmpty ? "Search address…" : toLabel)
                     .foregroundStyle(toLabel.isEmpty ? .tertiary : .primary)
@@ -167,12 +181,11 @@ struct LogTripView: View {
         }
         .foregroundStyle(.primary)
 
-        // Calculate button / result
         if let miles = calculatedMiles {
             LabeledContent("Distance") {
                 Text("\(miles.formatted(.number.precision(.fractionLength(2)))) mi")
+                    .foregroundStyle(.secondary)
             }
-            .foregroundStyle(.secondary)
         } else if let error = calculationError {
             Label(error, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
@@ -203,7 +216,7 @@ struct LogTripView: View {
     private var manualFields: some View {
         TextField("Start location", text: $manualStartLocation)
         TextField("End location", text: $manualEndLocation)
-        LabeledContent("Miles") {
+        LabeledContent("Miles (one way)") {
             TextField("0.0", value: $manualMiles, format: .number)
                 .multilineTextAlignment(.trailing)
                 .keyboardType(.decimalPad)
@@ -229,7 +242,7 @@ struct LogTripView: View {
             date: date,
             startLocation: resolvedStart,
             endLocation: resolvedEnd,
-            miles: resolvedMiles,
+            miles: totalMiles,
             purpose: purpose.isEmpty ? "Business trip" : purpose,
             notes: notes
         )

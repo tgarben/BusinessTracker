@@ -6,27 +6,29 @@ struct MileageView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var showLogTrip = false
+    @State private var showHistory = false
 
-    // Month summary
     private var monthTrips: [MileageTrip] {
         let start = Calendar.current.startOfMonth(for: .now)
         return trips.filter { $0.date >= start }
     }
 
-    private var monthMiles: Double { monthTrips.reduce(0) { $0 + $1.miles } }
+    private var monthMiles: Double        { monthTrips.reduce(0) { $0 + $1.miles } }
     private var monthReimbursement: Double { monthTrips.reduce(0) { $0 + $1.reimbursementAmount } }
 
     var body: some View {
         NavigationStack {
             List {
-                // Month summary card
                 Section {
-                    MonthSummaryCard(miles: monthMiles, reimbursement: monthReimbursement)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
+                    MileageSummaryCard(
+                        miles: monthMiles,
+                        reimbursement: monthReimbursement,
+                        label: "\(Date.now.formatted(.dateTime.month(.wide))) Miles"
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 }
 
-                // Trips grouped by date
                 if trips.isEmpty {
                     Section {
                         ContentUnavailableView(
@@ -57,6 +59,10 @@ struct MileageView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Mileage")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("History") { showHistory = true }
+                        .disabled(trips.isEmpty)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showLogTrip = true } label: {
                         Image(systemName: "plus")
@@ -66,6 +72,9 @@ struct MileageView: View {
             .sheet(isPresented: $showLogTrip) {
                 LogTripView()
             }
+            .sheet(isPresented: $showHistory) {
+                MileageHistoryView()
+            }
         }
     }
 
@@ -74,29 +83,18 @@ struct MileageView: View {
     }
 }
 
-// MARK: - Month Summary Card
+// MARK: - Shared summary card (used by MileageView + MileageHistoryView)
 
-private struct MonthSummaryCard: View {
+struct MileageSummaryCard: View {
     let miles: Double
     let reimbursement: Double
-
-    private var monthName: String {
-        Date.now.formatted(.dateTime.month(.wide))
-    }
+    let label: String
 
     var body: some View {
         HStack(spacing: 0) {
-            summaryItem(
-                value: String(format: "%.1f", miles),
-                unit: "mi",
-                label: "\(monthName) Miles"
-            )
+            summaryItem(value: String(format: "%.1f", miles), unit: "mi", label: label)
             Divider().frame(height: 40)
-            summaryItem(
-                value: reimbursement.formatted(.currency(code: "USD")),
-                unit: nil,
-                label: "Reimbursement"
-            )
+            summaryItem(value: reimbursement.formatted(.currency(code: "USD")), unit: nil, label: "Reimbursement")
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
@@ -109,9 +107,7 @@ private struct MonthSummaryCard: View {
         VStack(spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value).font(.title2.bold())
-                if let unit {
-                    Text(unit).font(.caption).foregroundStyle(.secondary)
-                }
+                if let unit { Text(unit).font(.caption).foregroundStyle(.secondary) }
             }
             Text(label).font(.caption).foregroundStyle(.secondary)
         }
@@ -119,9 +115,9 @@ private struct MonthSummaryCard: View {
     }
 }
 
-// MARK: - Trip Row
+// MARK: - Shared trip row (used by MileageView + MileageMonthDetailView)
 
-private struct TripRow: View {
+struct TripRow: View {
     let trip: MileageTrip
 
     var body: some View {

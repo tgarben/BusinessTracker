@@ -125,7 +125,7 @@ private struct PresetRow: View {
         HStack(spacing: 14) {
             Image(systemName: systemImage)
                 .font(.title3)
-                .foregroundStyle(.accent)
+//                .foregroundStyle(.accent)
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
