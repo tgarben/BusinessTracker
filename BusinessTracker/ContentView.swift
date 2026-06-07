@@ -1,33 +1,24 @@
+//
+//  ContentView.swift
+//  BusinessTracker
+//
+//  Created by Tyler Garben on 6/6/26.
+//
+
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
     var body: some View {
-        TabView {
-            Tab("Expenses", systemImage: "creditcard") {
-                ExpensesView()
-            }
-            Tab("Mileage", systemImage: "car") {
-                MileageView()
-            }
-            Tab("Time", systemImage: "clock") {
-                TimeTrackingView()
-            }
-            Tab("Income", systemImage: "dollarsign.circle") {
-                IncomeView()
-            }
-            Tab("Reports", systemImage: "chart.bar") {
-                ReportsView()
-            }
+        VStack {
+            Image(systemName: "globe")
+                .imageScale(.large)
+                .foregroundStyle(.tint)
+            Text("Hello, world!")
         }
+        .padding()
     }
 }
 
 #Preview {
     ContentView()
-        .environment(TimerState())
-        .modelContainer(for: [
-            Expense.self, Client.self, Project.self,
-            TimeEntry.self, MileageTrip.self, IncomeEntry.self
-        ], inMemory: true)
 }

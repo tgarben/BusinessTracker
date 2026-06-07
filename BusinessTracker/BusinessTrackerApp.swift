@@ -1,22 +1,17 @@
+//
+//  BusinessTrackerApp.swift
+//  BusinessTracker
+//
+//  Created by Tyler Garben on 6/6/26.
+//
+
 import SwiftUI
-import SwiftData
 
 @main
 struct BusinessTrackerApp: App {
-    @State private var timerState = TimerState()
-
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(timerState)
         }
-        .modelContainer(for: [
-            Expense.self,
-            Client.self,
-            Project.self,
-            TimeEntry.self,
-            MileageTrip.self,
-            IncomeEntry.self,
-        ])
     }
 }
