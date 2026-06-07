@@ -3,14 +3,18 @@ import SwiftData
 
 struct TimerSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Environment(TimerState.self) private var timerState
     @Query(sort: \Client.name) private var clients: [Client]
+    @Query(sort: \TimePreset.sortOrder) private var presets: [TimePreset]
 
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
-    @State private var showQuickSave = false
-    @State private var showFullForm = false
-    @State private var stoppedHours: Double = 0
+
+    // Post-save confirmation state
+    @State private var savedHours: Double?
+    @State private var savedClient: Client?
+    @State private var savedProject: Project?
 
     private var availableProjects: [Project] {
         selectedClient?.projects.sorted { $0.name < $1.name } ?? []
@@ -21,76 +25,102 @@ struct TimerSheet: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                // Clock display
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
-                    Text(timerState.isRunning ? timerState.elapsed.timerFormatted : "0:00:00")
-                        .font(.system(size: 64, weight: .thin, design: .monospaced))
-                        .foregroundStyle(timerState.isRunning ? .red : .primary)
-                        .contentTransition(.numericText())
-                }
+                if let hours = savedHours {
+                    // Brief confirmation — auto-dismisses
+                    savedConfirmation(hours: hours)
+                } else {
+                    // Clock
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        Text(timerState.isRunning ? timerState.elapsed.timerFormatted : "0:00:00")
+                            .font(.system(size: 64, weight: .thin, design: .monospaced))
+                            .foregroundStyle(timerState.isRunning ? .red : .primary)
+                            .contentTransition(.numericText())
+                    }
 
-                // Client / project pickers (only when not yet running)
-                if !timerState.isRunning {
-                    VStack(spacing: 12) {
-                        Picker("Client", selection: $selectedClient) {
-                            Text("Select a client").tag(Optional<Client>.none)
-                            ForEach(clients) { client in
-                                Text(client.name).tag(Optional(client))
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                        .onChange(of: selectedClient) { _, _ in selectedProject = nil }
-
-                        if !availableProjects.isEmpty {
-                            Picker("Project", selection: $selectedProject) {
-                                Text("No project").tag(Optional<Project>.none)
-                                ForEach(availableProjects) { project in
-                                    Text(project.name).tag(Optional(project))
+                    if !timerState.isRunning {
+                        // Pickers + optional preset shortcuts
+                        VStack(spacing: 12) {
+                            Picker("Client", selection: $selectedClient) {
+                                Text("Uncategorized").tag(Optional<Client>.none)
+                                ForEach(clients) { client in
+                                    Text(client.name).tag(Optional(client))
                                 }
                             }
                             .pickerStyle(.menu)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                        }
-                    }
-                    .padding(.horizontal)
-                } else {
-                    VStack(spacing: 4) {
-                        if let client = timerState.client {
-                            Text(client.name).font(.headline)
-                        }
-                        if let project = timerState.project {
-                            Text(project.name)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+                            .onChange(of: selectedClient) { _, _ in selectedProject = nil }
 
-                // Start / Stop button
-                Button {
-                    if timerState.isRunning {
-                        stoppedHours = timerState.stop()
-                        showQuickSave = true
+                            if !availableProjects.isEmpty {
+                                Picker("Project", selection: $selectedProject) {
+                                    Text("No project").tag(Optional<Project>.none)
+                                    ForEach(availableProjects) { project in
+                                        Text(project.name).tag(Optional(project))
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            }
+
+                            // Preset quick-start buttons
+                            if !presets.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(presets) { preset in
+                                            Button {
+                                                selectedClient = preset.client
+                                                selectedProject = preset.project
+                                            } label: {
+                                                Text(preset.name)
+                                                    .font(.caption.bold())
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 6)
+                                                    .background(.regularMaterial, in: Capsule())
+                                            }
+                                            .foregroundStyle(.primary)
+                                        }
+                                    }
+                                    .padding(.horizontal, 2)
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
                     } else {
-                        timerState.start(client: selectedClient, project: selectedProject)
+                        // Show what we're tracking
+                        VStack(spacing: 4) {
+                            Text(selectedClient?.name ?? "Uncategorized")
+                                .font(.headline)
+                            if let project = selectedProject {
+                                Text(project.name)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
-                } label: {
-                    Label(
-                        timerState.isRunning ? "Stop" : "Start",
-                        systemImage: timerState.isRunning ? "stop.circle.fill" : "play.circle.fill"
-                    )
-                    .font(.title2.bold())
-                    .foregroundStyle(.white)
-                    .frame(width: 180, height: 56)
-                    .background(
-                        timerState.isRunning ? Color.red : Color.green,
-                        in: RoundedRectangle(cornerRadius: 16)
-                    )
+
+                    // Start / Stop button
+                    Button {
+                        if timerState.isRunning {
+                            stopAndSave()
+                        } else {
+                            timerState.start(client: selectedClient, project: selectedProject)
+                        }
+                    } label: {
+                        Label(
+                            timerState.isRunning ? "Stop" : "Start",
+                            systemImage: timerState.isRunning ? "stop.circle.fill" : "play.circle.fill"
+                        )
+                        .font(.title2.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 180, height: 56)
+                        .background(
+                            timerState.isRunning ? Color.red : Color.green,
+                            in: RoundedRectangle(cornerRadius: 16)
+                        )
+                    }
                 }
 
                 Spacer()
@@ -102,22 +132,64 @@ struct TimerSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
-            // Quick-save half sheet after stopping
-            .sheet(isPresented: $showQuickSave, onDismiss: {
-                if !showFullForm { dismiss() }
-            }) {
-                QuickSaveSheet(hours: stoppedHours) {
-                    showFullForm = true
+        }
+    }
+
+    // MARK: - Saved confirmation view
+
+    @ViewBuilder
+    private func savedConfirmation(hours: Double) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.green)
+
+            Text("Saved")
+                .font(.title.bold())
+
+            VStack(spacing: 4) {
+                Text(String(format: "%.2f hrs", hours))
+                    .font(.title3)
+                if let client = savedClient {
+                    Text(client.name)
+                        .foregroundStyle(.secondary)
+                }
+                if let project = savedProject {
+                    Text(project.name)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
             }
-            // Full form — opened from "Log with details…" in QuickSaveSheet
-            .sheet(isPresented: $showFullForm, onDismiss: { dismiss() }) {
-                LogTimeView(
-                    prefillHours: stoppedHours,
-                    prefillClient: selectedClient,
-                    prefillProject: selectedProject
-                )
-            }
+        }
+        .transition(.scale.combined(with: .opacity))
+    }
+
+    // MARK: - Stop and auto-save
+
+    private func stopAndSave() {
+        // Capture before stop() clears them
+        let client  = timerState.client
+        let project = timerState.project
+        let hours   = timerState.stop()
+
+        let entry = TimeEntry(
+            date: .now,
+            client: client,
+            project: project,
+            hours: hours,
+            hourlyRate: project?.hourlyRate ?? 0
+        )
+        modelContext.insert(entry)
+
+        withAnimation(.spring(duration: 0.4)) {
+            savedHours   = hours
+            savedClient  = client
+            savedProject = project
+        }
+
+        Task {
+            try? await Task.sleep(for: .seconds(1.8))
+            await MainActor.run { dismiss() }
         }
     }
 }

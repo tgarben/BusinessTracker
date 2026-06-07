@@ -9,6 +9,7 @@ struct TimeTrackingView: View {
     @State private var showTimer = false
     @State private var showClients = false
     @State private var showPresets = false
+    @State private var entryToEdit: TimeEntry?
 
     // Week summary
     private var weekEntries: [TimeEntry] {
@@ -59,6 +60,8 @@ struct TimeTrackingView: View {
                         Section(header: Text(day, style: .date)) {
                             ForEach(grouped[day] ?? []) { entry in
                                 TimeEntryRow(entry: entry)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { entryToEdit = entry }
                             }
                             .onDelete { indexSet in
                                 deleteEntries(from: grouped[day] ?? [], at: indexSet)
@@ -96,12 +99,16 @@ struct TimeTrackingView: View {
             }
             .sheet(isPresented: $showTimer) {
                 TimerSheet()
+                    .presentationDetents([.medium])
             }
             .sheet(isPresented: $showClients) {
                 ClientListView()
             }
             .sheet(isPresented: $showPresets) {
                 PresetsView()
+            }
+            .sheet(item: $entryToEdit) { entry in
+                TimeEntryEditView(entry: entry)
             }
         }
     }
@@ -173,6 +180,7 @@ private struct ActiveTimerCard: View {
                     Label("Timer Running", systemImage: "record.circle")
                         .font(.caption.bold())
                         .foregroundStyle(.red)
+                        .padding(.vertical, 4)
                     if let client = timerState.client {
                         Text(client.name)
                             .font(.subheadline.bold())
