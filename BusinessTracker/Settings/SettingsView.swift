@@ -161,6 +161,7 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Settings")
             .sheet(isPresented: $showClients) {
                 ClientListView()

@@ -13,11 +13,11 @@ struct ContentView: View {
             Tab("Expenses", systemImage: "creditcard") {
                 ExpensesView()
             }
+            Tab("Income", systemImage: "dollarsign.circle") {
+                IncomeView()
+            }
             Tab("Reports", systemImage: "chart.bar") {
                 ReportsView()
-            }
-            Tab("Settings", systemImage: "gearshape") {
-                SettingsView()
             }
         }
     }

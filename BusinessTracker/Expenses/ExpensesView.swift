@@ -6,6 +6,7 @@ struct ExpensesView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var showAddExpense = false
+    @State private var showSettings = false
     @State private var editingExpense: Expense?
 
     private var monthStart: Date {
@@ -65,6 +66,11 @@ struct ExpensesView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Expenses")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showAddExpense = true } label: {
                         Image(systemName: "plus")
@@ -76,6 +82,9 @@ struct ExpensesView: View {
             }
             .sheet(item: $editingExpense) { expense in
                 ExpenseEditView(expense: expense)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
         }
     }

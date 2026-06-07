@@ -7,6 +7,7 @@ struct MileageView: View {
 
     @State private var showLogTrip = false
     @State private var showHistory = false
+    @State private var showSettings = false
     @State private var editingTrip: MileageTrip?
 
     private var monthTrips: [MileageTrip] {
@@ -66,6 +67,11 @@ struct MileageView: View {
                     Button("History") { showHistory = true }
                         .disabled(trips.isEmpty)
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showLogTrip = true } label: {
                         Image(systemName: "plus")
@@ -80,6 +86,9 @@ struct MileageView: View {
             }
             .sheet(item: $editingTrip) { trip in
                 MileageTripEditView(trip: trip)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
         }
     }

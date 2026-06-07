@@ -9,6 +9,7 @@ struct TimeTrackingView: View {
     @State private var showTimer = false
     @State private var showClients = false
     @State private var showPresets = false
+    @State private var showSettings = false
     @State private var entryToEdit: TimeEntry?
 
     // Week summary
@@ -81,6 +82,11 @@ struct TimeTrackingView: View {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         if timerState.isRunning { showTimer = true }
@@ -109,6 +115,9 @@ struct TimeTrackingView: View {
             }
             .sheet(item: $entryToEdit) { entry in
                 TimeEntryEditView(entry: entry)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
         }
     }

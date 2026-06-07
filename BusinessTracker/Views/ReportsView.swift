@@ -10,6 +10,7 @@ struct ReportsView: View {
     @AppStorage("report_gasPrice") private var gasPrice: Double = 3.80
 
     @State private var showFuelSettings = false
+    @State private var showSettings = false
 
     // MARK: - Current month window
 
@@ -108,8 +109,18 @@ struct ReportsView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Reports")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
             .sheet(isPresented: $showFuelSettings) {
                 FuelSettingsSheet(mpg: $mpg, gasPrice: $gasPrice)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
         }
     }
