@@ -8,12 +8,12 @@ struct PresetsView: View {
     @Query(sort: \Client.name) private var clients: [Client]
 
     @State private var showAddPreset = false
+    @State private var presetToEdit: TimePreset?
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    // Uncategorized is always built-in, shown for reference
                     HStack(spacing: 14) {
                         Image(systemName: "tray")
                             .font(.title3)
@@ -39,16 +39,9 @@ struct PresetsView: View {
                             .font(.subheadline)
                     } else {
                         ForEach(presets) { preset in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(preset.name).font(.body)
-                                let sub = subtitle(for: preset)
-                                if !sub.isEmpty {
-                                    Text(sub)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 2)
+                            PresetListRow(preset: preset)
+                                .contentShape(Rectangle())
+                                .onTapGesture { presetToEdit = preset }
                         }
                         .onDelete(perform: deletePresets)
                         .onMove(perform: movePresets)
@@ -56,7 +49,7 @@ struct PresetsView: View {
                 } header: {
                     Text("Your Presets")
                 } footer: {
-                    Text("Presets let you save a time entry instantly after stopping the timer.")
+                    Text("Tap a preset to edit it. Drag to reorder.")
                 }
             }
             .navigationTitle("Presets")
@@ -76,7 +69,10 @@ struct PresetsView: View {
                 }
             }
             .sheet(isPresented: $showAddPreset) {
-                AddPresetView()
+                AddEditPresetView()
+            }
+            .sheet(item: $presetToEdit) { preset in
+                AddEditPresetView(preset: preset)
             }
             .overlay {
                 if clients.isEmpty {
@@ -88,18 +84,6 @@ struct PresetsView: View {
                 }
             }
         }
-    }
-
-    private func subtitle(for preset: TimePreset) -> String {
-        var parts: [String] = []
-        if let client = preset.client { parts.append(client.name) }
-        if let project = preset.project {
-            parts.append(project.name)
-            if project.hourlyRate > 0 {
-                parts.append(project.hourlyRate.formatted(.currency(code: "USD")) + "/hr")
-            }
-        }
-        return parts.joined(separator: " · ")
     }
 
     private func deletePresets(at offsets: IndexSet) {
@@ -115,22 +99,66 @@ struct PresetsView: View {
     }
 }
 
-// MARK: - Add Preset
+// MARK: - Preset list row
 
-private struct AddPresetView: View {
+private struct PresetListRow: View {
+    let preset: TimePreset
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(preset.name).font(.body)
+
+            HStack(spacing: 4) {
+                if let client = preset.client {
+                    Text(client.name).foregroundStyle(.secondary)
+                }
+                if let project = preset.project {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(project.name).foregroundStyle(.secondary)
+                }
+                if preset.effectiveRate > 0 {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(preset.effectiveRate.formatted(.currency(code: "USD")) + "/hr")
+                        .foregroundStyle(preset.hourlyRateOverride != nil ? .orange : .secondary)
+                }
+            }
+            .font(.caption)
+
+            if !preset.notesTemplate.isEmpty {
+                Text("\"\(preset.notesTemplate)\"")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Add / Edit preset
+
+struct AddEditPresetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Client.name) private var clients: [Client]
     @Query(sort: \TimePreset.sortOrder) private var existingPresets: [TimePreset]
 
+    var preset: TimePreset? // nil = add, non-nil = edit
+
     @State private var name: String = ""
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
+    @State private var useRateOverride = false
+    @State private var rateOverride: Decimal = 0
+    @State private var notesTemplate: String = ""
+
+    private var isEditing: Bool { preset != nil }
 
     private var availableProjects: [Project] {
         selectedClient?.projects.sorted { $0.name < $1.name } ?? []
     }
 
+    private var projectRate: Decimal { selectedProject?.hourlyRate ?? 0 }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
@@ -140,14 +168,18 @@ private struct AddPresetView: View {
                     TextField("e.g. Acme – Development", text: $name)
                 }
 
-                Section("Link to Client & Project") {
+                Section("Client & Project") {
                     Picker("Client", selection: $selectedClient) {
                         Text("None").tag(Optional<Client>.none)
                         ForEach(clients) { client in
                             Text(client.name).tag(Optional(client))
                         }
                     }
-                    .onChange(of: selectedClient) { _, _ in selectedProject = nil }
+                    .onChange(of: selectedClient) { _, newClient in
+                        if selectedProject?.client?.persistentModelID != newClient?.persistentModelID {
+                            selectedProject = nil
+                        }
+                    }
 
                     if !availableProjects.isEmpty {
                         Picker("Project", selection: $selectedProject) {
@@ -159,34 +191,86 @@ private struct AddPresetView: View {
                     }
                 }
 
-                if let project = selectedProject, project.hourlyRate > 0 {
-                    Section {
-                        LabeledContent("Rate", value: project.hourlyRate.formatted(.currency(code: "USD")) + "/hr")
+                Section {
+                    Toggle("Override Hourly Rate", isOn: $useRateOverride)
+
+                    if useRateOverride {
+                        LabeledContent("Rate") {
+                            TextField("0.00", value: $rateOverride, format: .currency(code: "USD"))
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                        }
+                    } else if projectRate > 0 {
+                        LabeledContent("Rate from project") {
+                            Text(projectRate.formatted(.currency(code: "USD")) + "/hr")
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                } header: {
+                    Text("Hourly Rate")
+                } footer: {
+                    Text(useRateOverride
+                         ? "This rate will override the project's default when using this preset."
+                         : "Uses the project's default rate. Enable override for a custom rate (e.g. rush billing).")
+                }
+
+                Section {
+                    TextField("e.g. Weekly standup, Code review…", text: $notesTemplate, axis: .vertical)
+                        .lineLimit(3...6)
+                } header: {
+                    Text("Notes Template")
+                } footer: {
+                    Text("Pre-fills the notes field when this preset is used. Still editable before saving.")
                 }
             }
-            .navigationTitle("New Preset")
+            .navigationTitle(isEditing ? "Edit Preset" : "New Preset")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") { save() }
+                    Button(isEditing ? "Save" : "Add") { save() }
                         .disabled(!canSave)
                 }
             }
+            .onAppear { loadFromPreset() }
+        }
+    }
+
+    private func loadFromPreset() {
+        guard let preset else { return }
+        name             = preset.name
+        selectedClient   = preset.client
+        selectedProject  = preset.project
+        notesTemplate    = preset.notesTemplate
+        if let override = preset.hourlyRateOverride {
+            useRateOverride = true
+            rateOverride    = override
         }
     }
 
     private func save() {
-        let preset = TimePreset(
-            name: name.trimmingCharacters(in: .whitespaces),
-            client: selectedClient,
-            project: selectedProject,
-            sortOrder: existingPresets.count
-        )
-        modelContext.insert(preset)
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let override: Decimal? = useRateOverride ? rateOverride : nil
+
+        if let preset {
+            preset.name                = trimmed
+            preset.client              = selectedClient
+            preset.project             = selectedProject
+            preset.hourlyRateOverride  = override
+            preset.notesTemplate       = notesTemplate
+        } else {
+            let newPreset = TimePreset(
+                name: trimmed,
+                client: selectedClient,
+                project: selectedProject,
+                sortOrder: existingPresets.count,
+                hourlyRateOverride: override,
+                notesTemplate: notesTemplate
+            )
+            modelContext.insert(newPreset)
+        }
         dismiss()
     }
 }

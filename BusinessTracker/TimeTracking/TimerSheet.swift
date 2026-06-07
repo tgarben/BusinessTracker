@@ -10,6 +10,7 @@ struct TimerSheet: View {
 
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
+    @State private var activePreset: TimePreset?   // preset used to start this session
 
     // Post-save confirmation state
     @State private var savedHours: Double?
@@ -51,10 +52,10 @@ struct TimerSheet: View {
                             .padding()
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                             .onChange(of: selectedClient) { _, newClient in
-                                // Only clear project if it doesn't belong to the newly selected client
                                 if selectedProject?.client?.persistentModelID != newClient?.persistentModelID {
                                     selectedProject = nil
                                 }
+                                activePreset = nil // manual change overrides preset
                             }
 
                             if !availableProjects.isEmpty {
@@ -78,6 +79,7 @@ struct TimerSheet: View {
                                             Button {
                                                 selectedClient = preset.client
                                                 selectedProject = preset.project
+                                                activePreset = preset
                                             } label: {
                                                 Text(preset.name)
                                                     .font(.caption.bold())
@@ -177,14 +179,20 @@ struct TimerSheet: View {
         let project = timerState.project
         let hours   = timerState.stop()
 
+        // Preset overrides take priority; fall back to project rate
+        let rate  = activePreset?.effectiveRate ?? project?.hourlyRate ?? 0
+        let notes = activePreset?.notesTemplate ?? ""
+
         let entry = TimeEntry(
             date: .now,
             client: client,
             project: project,
             hours: hours,
-            hourlyRate: project?.hourlyRate ?? 0
+            hourlyRate: rate,
+            notes: notes
         )
         modelContext.insert(entry)
+        activePreset = nil
 
         withAnimation(.spring(duration: 0.4)) {
             savedHours   = hours

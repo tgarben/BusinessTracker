@@ -1,9 +1,6 @@
 import Foundation
 import SwiftData
 
-/// A saved one-tap preset for the timer stop sheet.
-/// Links a display name to an optional client + project so the user
-/// can save a time entry instantly with zero additional input.
 @Model
 final class TimePreset {
     var name: String
@@ -11,10 +8,30 @@ final class TimePreset {
     var project: Project?
     var sortOrder: Int
 
-    init(name: String, client: Client? = nil, project: Project? = nil, sortOrder: Int = 0) {
+    /// If set, overrides the project's hourly rate when saving via this preset.
+    var hourlyRateOverride: Decimal?
+
+    /// Pre-filled notes template. Appears in the entry's notes field; still editable after save.
+    var notesTemplate: String
+
+    /// The effective rate: override if set, otherwise falls back to the project rate.
+    var effectiveRate: Decimal {
+        hourlyRateOverride ?? project?.hourlyRate ?? 0
+    }
+
+    init(
+        name: String,
+        client: Client? = nil,
+        project: Project? = nil,
+        sortOrder: Int = 0,
+        hourlyRateOverride: Decimal? = nil,
+        notesTemplate: String = ""
+    ) {
         self.name = name
         self.client = client
         self.project = project
         self.sortOrder = sortOrder
+        self.hourlyRateOverride = hourlyRateOverride
+        self.notesTemplate = notesTemplate
     }
 }
