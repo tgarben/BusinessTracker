@@ -50,7 +50,12 @@ struct TimerSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                            .onChange(of: selectedClient) { _, _ in selectedProject = nil }
+                            .onChange(of: selectedClient) { _, newClient in
+                                // Only clear project if it doesn't belong to the newly selected client
+                                if selectedProject?.client?.persistentModelID != newClient?.persistentModelID {
+                                    selectedProject = nil
+                                }
+                            }
 
                             if !availableProjects.isEmpty {
                                 Picker("Project", selection: $selectedProject) {
