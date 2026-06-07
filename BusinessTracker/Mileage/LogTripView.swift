@@ -170,8 +170,7 @@ struct LogTripView: View {
         // Calculate button / result
         if let miles = calculatedMiles {
             LabeledContent("Distance") {
-                Text(miles, format: .number.precision(.fractionLength(2)))
-                + Text(" mi")
+                Text("\(miles.formatted(.number.precision(.fractionLength(2)))) mi")
             }
             .foregroundStyle(.secondary)
         } else if let error = calculationError {

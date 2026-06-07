@@ -114,9 +114,7 @@ struct LogTimeView: View {
                                 .foregroundStyle(.orange)
                         } else {
                             LabeledContent("Duration") {
-                                Text(resolvedHours, format: .number.precision(.fractionLength(2)))
-                                    .foregroundStyle(.secondary)
-                                + Text(" hrs")
+                                Text("\(resolvedHours.formatted(.number.precision(.fractionLength(2)))) hrs")
                                     .foregroundStyle(.secondary)
                             }
                         }

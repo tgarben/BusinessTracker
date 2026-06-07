@@ -67,15 +67,10 @@ private struct ClientRow: View {
                 Text(client.name)
                     .font(.headline)
                 Spacer()
-                Text(client.defaultHourlyRate.formatted(.currency(code: "USD")) + "/hr")
+                let count = client.projects.count
+                Text("\(count) project\(count == 1 ? "" : "s")")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            }
-            let count = client.projects.count
-            if count > 0 {
-                Text("\(count) project\(count == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
             }
         }
         .padding(.vertical, 2)
