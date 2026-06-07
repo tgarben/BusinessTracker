@@ -9,6 +9,7 @@ struct AddEditProjectView: View {
     var client: Client?
 
     @State private var name: String = ""
+    @State private var hourlyRate: Decimal = 0
 
     private var isEditing: Bool { project != nil }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -18,6 +19,11 @@ struct AddEditProjectView: View {
             Form {
                 Section("Project Info") {
                     TextField("Project name", text: $name)
+                    LabeledContent("Hourly Rate") {
+                        TextField("0.00", value: $hourlyRate, format: .currency(code: "USD"))
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad)
+                    }
                 }
                 if let client {
                     Section {
@@ -37,7 +43,10 @@ struct AddEditProjectView: View {
                 }
             }
             .onAppear {
-                if let project { name = project.name }
+                if let project {
+                    name = project.name
+                    hourlyRate = project.hourlyRate
+                }
             }
         }
     }
@@ -46,9 +55,9 @@ struct AddEditProjectView: View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if let project {
             project.name = trimmed
+            project.hourlyRate = hourlyRate
         } else {
-            let newProject = Project(name: trimmed, client: client)
-            modelContext.insert(newProject)
+            modelContext.insert(Project(name: trimmed, hourlyRate: hourlyRate, client: client))
         }
         dismiss()
     }

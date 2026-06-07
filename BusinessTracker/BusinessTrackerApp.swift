@@ -15,6 +15,7 @@ struct BusinessTrackerApp: App {
             Client.self,
             Project.self,
             TimeEntry.self,
+            TimePreset.self,
             MileageTrip.self,
             IncomeEntry.self,
         ])

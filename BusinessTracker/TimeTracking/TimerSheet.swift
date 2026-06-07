@@ -1,16 +1,15 @@
 import SwiftUI
 import SwiftData
 
-/// The sheet that lets users start/stop the live timer and then save the entry.
 struct TimerSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
     @Environment(TimerState.self) private var timerState
     @Query(sort: \Client.name) private var clients: [Client]
 
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
-    @State private var showSaveSheet = false
+    @State private var showQuickSave = false
+    @State private var showFullForm = false
     @State private var stoppedHours: Double = 0
 
     private var availableProjects: [Project] {
@@ -30,7 +29,7 @@ struct TimerSheet: View {
                         .contentTransition(.numericText())
                 }
 
-                // Client / project pickers (only shown when not running)
+                // Client / project pickers (only when not yet running)
                 if !timerState.isRunning {
                     VStack(spacing: 12) {
                         Picker("Client", selection: $selectedClient) {
@@ -60,11 +59,9 @@ struct TimerSheet: View {
                     }
                     .padding(.horizontal)
                 } else {
-                    // Show who we're tracking for
                     VStack(spacing: 4) {
                         if let client = timerState.client {
-                            Text(client.name)
-                                .font(.headline)
+                            Text(client.name).font(.headline)
                         }
                         if let project = timerState.project {
                             Text(project.name)
@@ -78,7 +75,7 @@ struct TimerSheet: View {
                 Button {
                     if timerState.isRunning {
                         stoppedHours = timerState.stop()
-                        showSaveSheet = true
+                        showQuickSave = true
                     } else {
                         timerState.start(client: selectedClient, project: selectedProject)
                     }
@@ -90,8 +87,10 @@ struct TimerSheet: View {
                     .font(.title2.bold())
                     .foregroundStyle(.white)
                     .frame(width: 180, height: 56)
-                    .background(timerState.isRunning ? Color.red : Color.green,
-                                in: RoundedRectangle(cornerRadius: 16))
+                    .background(
+                        timerState.isRunning ? Color.red : Color.green,
+                        in: RoundedRectangle(cornerRadius: 16)
+                    )
                 }
 
                 Spacer()
@@ -103,7 +102,16 @@ struct TimerSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .sheet(isPresented: $showSaveSheet, onDismiss: { dismiss() }) {
+            // Quick-save half sheet after stopping
+            .sheet(isPresented: $showQuickSave, onDismiss: {
+                if !showFullForm { dismiss() }
+            }) {
+                QuickSaveSheet(hours: stoppedHours) {
+                    showFullForm = true
+                }
+            }
+            // Full form — opened from "Log with details…" in QuickSaveSheet
+            .sheet(isPresented: $showFullForm, onDismiss: { dismiss() }) {
                 LogTimeView(
                     prefillHours: stoppedHours,
                     prefillClient: selectedClient,

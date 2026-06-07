@@ -8,7 +8,6 @@ struct AddEditClientView: View {
     var client: Client? // nil = add, non-nil = edit
 
     @State private var name: String = ""
-    @State private var hourlyRate: Decimal = 0
     @State private var projectToEdit: Project?
     @State private var showAddProject = false
 
@@ -20,18 +19,18 @@ struct AddEditClientView: View {
             Form {
                 Section("Client Info") {
                     TextField("Client name", text: $name)
-                    LabeledContent("Default Rate") {
-                        TextField("0.00", value: $hourlyRate, format: .currency(code: "USD"))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
-                    }
                 }
 
                 if let client {
                     Section {
                         ForEach(client.projects.sorted { $0.name < $1.name }) { project in
                             HStack {
-                                Text(project.name)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(project.name)
+                                    Text(project.hourlyRate.formatted(.currency(code: "USD")) + "/hr")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -52,6 +51,8 @@ struct AddEditClientView: View {
                         }
                     } header: {
                         Text("Projects")
+                    } footer: {
+                        Text("Each project carries its own hourly rate.")
                     }
                 }
             }
@@ -67,15 +68,10 @@ struct AddEditClientView: View {
                 }
             }
             .onAppear {
-                if let client {
-                    name = client.name
-                    hourlyRate = client.defaultHourlyRate
-                }
+                if let client { name = client.name }
             }
             .sheet(isPresented: $showAddProject) {
-                if let client {
-                    AddEditProjectView(client: client)
-                }
+                if let client { AddEditProjectView(client: client) }
             }
             .sheet(item: $projectToEdit) { project in
                 AddEditProjectView(project: project, client: project.client)
@@ -87,10 +83,8 @@ struct AddEditClientView: View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if let client {
             client.name = trimmed
-            client.defaultHourlyRate = hourlyRate
         } else {
-            let newClient = Client(name: trimmed, defaultHourlyRate: hourlyRate)
-            modelContext.insert(newClient)
+            modelContext.insert(Client(name: trimmed))
         }
         dismiss()
     }

@@ -26,7 +26,7 @@ struct LogTimeView: View {
 
     @State private var entryMode: EntryMode = .duration
 
-    // Prefill from a stopped timer
+    // Prefill from a stopped timer or preset
     var prefillHours: Double? = nil
     var prefillClient: Client? = nil
     var prefillProject: Project? = nil
@@ -35,18 +35,15 @@ struct LogTimeView: View {
         selectedClient?.projects.sorted { $0.name < $1.name } ?? []
     }
 
-    /// The resolved hours value regardless of mode
     private var resolvedHours: Double {
         switch entryMode {
-        case .duration:
-            return hours
+        case .duration: return hours
         case .startEnd:
             let interval = endTime.timeIntervalSince(startTime)
             return max(0, interval / 3600)
         }
     }
 
-    /// The resolved date (start of entry)
     private var resolvedDate: Date {
         entryMode == .startEnd ? startTime : date
     }
@@ -54,7 +51,7 @@ struct LogTimeView: View {
     private var earnings: Decimal { Decimal(resolvedHours) * hourlyRate }
 
     private var canSave: Bool {
-        guard selectedClient != nil && resolvedHours > 0 else { return false }
+        guard resolvedHours > 0 else { return false }
         if entryMode == .startEnd { return endTime > startTime }
         return true
     }
@@ -62,7 +59,6 @@ struct LogTimeView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Client & Project
                 Section("Client & Project") {
                     Picker("Client", selection: $selectedClient) {
                         Text("Select a client").tag(Optional<Client>.none)
@@ -70,9 +66,9 @@ struct LogTimeView: View {
                             Text(client.name).tag(Optional(client))
                         }
                     }
-                    .onChange(of: selectedClient) { _, newClient in
+                    .onChange(of: selectedClient) { _, _ in
                         selectedProject = nil
-                        hourlyRate = newClient?.defaultHourlyRate ?? 0
+                        hourlyRate = 0
                     }
 
                     if !availableProjects.isEmpty {
@@ -82,10 +78,12 @@ struct LogTimeView: View {
                                 Text(project.name).tag(Optional(project))
                             }
                         }
+                        .onChange(of: selectedProject) { _, newProject in
+                            hourlyRate = newProject?.hourlyRate ?? 0
+                        }
                     }
                 }
 
-                // Time entry — switches based on mode
                 switch entryMode {
                 case .duration:
                     Section("Time") {
@@ -125,14 +123,13 @@ struct LogTimeView: View {
                     }
                 }
 
-                // Rate & total
                 Section("Rate") {
                     LabeledContent("Hourly Rate") {
                         TextField("0.00", value: $hourlyRate, format: .currency(code: "USD"))
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
                     }
-                    if selectedClient != nil && resolvedHours > 0 {
+                    if resolvedHours > 0 && hourlyRate > 0 {
                         LabeledContent("Total") {
                             Text(earnings.formatted(.currency(code: "USD")))
                                 .font(.headline)
@@ -158,11 +155,12 @@ struct LogTimeView: View {
             }
             .onAppear {
                 if let c = prefillClient { selectedClient = c }
-                if let p = prefillProject { selectedProject = p }
+                if let p = prefillProject {
+                    selectedProject = p
+                    hourlyRate = p.hourlyRate
+                }
                 if let h = prefillHours {
                     hours = h
-                    // Also set startTime/endTime to match the prefilled hours
-                    // so switching modes feels consistent
                     startTime = Calendar.current.date(byAdding: .second, value: -Int(h * 3600), to: .now) ?? .now
                     endTime = .now
                 }

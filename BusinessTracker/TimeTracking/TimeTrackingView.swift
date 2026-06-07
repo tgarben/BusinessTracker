@@ -8,6 +8,7 @@ struct TimeTrackingView: View {
     @State private var showLogTime = false
     @State private var showTimer = false
     @State private var showClients = false
+    @State private var showPresets = false
 
     // Week summary
     private var weekEntries: [TimeEntry] {
@@ -70,7 +71,12 @@ struct TimeTrackingView: View {
             .navigationTitle("Time Tracking")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Clients") { showClients = true }
+                    Menu {
+                        Button("Clients") { showClients = true }
+                        Button("Presets") { showPresets = true }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
@@ -93,6 +99,9 @@ struct TimeTrackingView: View {
             }
             .sheet(isPresented: $showClients) {
                 ClientListView()
+            }
+            .sheet(isPresented: $showPresets) {
+                PresetsView()
             }
         }
     }
