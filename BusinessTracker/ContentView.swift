@@ -4,6 +4,9 @@ import SwiftData
 struct ContentView: View {
     var body: some View {
         TabView {
+            Tab("Home", systemImage: "house") {
+                HomeView()
+            }
             Tab("Time", systemImage: "clock") {
                 TimeTrackingView()
             }
@@ -12,9 +15,6 @@ struct ContentView: View {
             }
             Tab("Expenses", systemImage: "creditcard") {
                 ExpensesView()
-            }
-            Tab("Income", systemImage: "dollarsign.circle") {
-                IncomeView()
             }
             Tab("Reports", systemImage: "chart.bar") {
                 ReportsView()

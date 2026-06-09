@@ -64,13 +64,14 @@ struct MileageView: View {
             .navigationTitle("Mileage")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("History") { showHistory = true }
-                        .disabled(trips.isEmpty)
-                }
-                ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
                     }
+                }
+                ToolbarSpacer(placement: .topBarLeading)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("History") { showHistory = true }
+                        .disabled(trips.isEmpty)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showLogTrip = true } label: {

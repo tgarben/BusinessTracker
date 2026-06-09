@@ -6,6 +6,7 @@ struct ExpensesView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var showAddExpense = false
+    @State private var showHistory = false
     @State private var showSettings = false
     @State private var editingExpense: Expense?
 
@@ -71,17 +72,26 @@ struct ExpensesView: View {
                         Image(systemName: "gearshape")
                     }
                 }
+                ToolbarSpacer(placement: .topBarLeading)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("History") { showHistory = true }
+                        .disabled(expenses.isEmpty)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showAddExpense = true } label: {
                         Image(systemName: "plus")
                     }
                 }
+
             }
             .sheet(isPresented: $showAddExpense) {
                 AddExpenseView()
             }
             .sheet(item: $editingExpense) { expense in
                 ExpenseEditView(expense: expense)
+            }
+            .sheet(isPresented: $showHistory) {
+                ExpenseHistoryView()
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
@@ -177,10 +187,18 @@ struct ExpenseRow: View {
 
                 Spacer()
 
-                if expense.receiptImageData != nil {
-                    Image(systemName: "paperclip")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                let receiptCount = expense.receiptImagesData.isEmpty
+                    ? (expense.receiptImageData != nil ? 1 : 0)
+                    : expense.receiptImagesData.count
+                if receiptCount > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "paperclip")
+                        if receiptCount > 1 {
+                            Text("\(receiptCount)").font(.caption2)
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
         }

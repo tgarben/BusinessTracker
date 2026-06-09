@@ -8,17 +8,15 @@ struct AddExpenseView: View {
     @Query(sort: \Client.name) private var clients: [Client]
 
     @State private var date: Date = .now
-    @State private var amount: Decimal = 0
     @State private var amountText: String = ""
     @State private var category: String = Expense.categories[0]
     @State private var selectedClient: Client?
     @State private var notes: String = ""
 
-    // Receipt photo
-    @State private var receiptItem: PhotosPickerItem?
-    @State private var receiptImage: UIImage?
+    @State private var receiptImages: [UIImage] = []
+    @State private var newReceiptItem: PhotosPickerItem?
     @State private var showCamera = false
-    @State private var showReceiptPreview = false
+    @State private var previewImage: UIImage?
 
     private var canSave: Bool {
         (Decimal(string: amountText) ?? 0) > 0
@@ -30,14 +28,15 @@ struct AddExpenseView: View {
                 Section("Details") {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
 
-                    // Amount
                     LabeledContent("Amount") {
-                        TextField("$0.00", text: $amountText)
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                        HStack(spacing: 2) {
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("0.00", text: $amountText)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                        }
                     }
 
-                    // Category
                     Picker("Category", selection: $category) {
                         ForEach(Expense.categories, id: \.self) { cat in
                             Label(cat, systemImage: Expense.categoryIcon(cat)).tag(cat)
@@ -59,47 +58,54 @@ struct AddExpenseView: View {
                         .lineLimit(3...6)
                 }
 
-                Section("Receipt") {
-                    if let image = receiptImage {
-                        // Preview thumbnail + remove
-                        HStack {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 64, height: 64)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .onTapGesture { showReceiptPreview = true }
+                Section("Receipts") {
+                    if !receiptImages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(receiptImages.indices, id: \.self) { index in
+                                    ZStack(alignment: .topTrailing) {
+                                        Image(uiImage: receiptImages[index])
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 72, height: 72)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            .onTapGesture { previewImage = receiptImages[index] }
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Receipt attached")
-                                    .font(.subheadline)
-                                Button("Remove", role: .destructive) {
-                                    receiptImage = nil
-                                    receiptItem = nil
-                                }
-                                .font(.caption)
-                            }
-                            .padding(.leading, 4)
-                        }
-                    } else {
-                        // Attach options
-                        PhotosPicker(selection: $receiptItem, matching: .images) {
-                            Label("Choose from Library", systemImage: "photo.on.rectangle")
-                        }
-                        .onChange(of: receiptItem) { _, item in
-                            Task {
-                                if let data = try? await item?.loadTransferable(type: Data.self),
-                                   let image = UIImage(data: data) {
-                                    receiptImage = image
+                                        Button {
+                                            receiptImages.remove(at: index)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 20))
+                                                .symbolRenderingMode(.palette)
+                                                .foregroundStyle(.white, .black.opacity(0.55))
+                                        }
+                                        .offset(x: 6, y: -6)
+                                    }
                                 }
                             }
+                            .padding(.horizontal, 2)
+                            .padding(.vertical, 10)
                         }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    }
 
-                        Button {
-                            showCamera = true
-                        } label: {
-                            Label("Take Photo", systemImage: "camera")
+                    PhotosPicker(selection: $newReceiptItem, matching: .images) {
+                        Label("Add from Library", systemImage: "photo.on.rectangle")
+                    }
+                    .onChange(of: newReceiptItem) { _, item in
+                        Task {
+                            if let data = try? await item?.loadTransferable(type: Data.self),
+                               let image = UIImage(data: data) {
+                                receiptImages.append(image)
+                                newReceiptItem = nil
+                            }
                         }
+                    }
+
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label("Take Photo", systemImage: "camera")
                     }
                 }
             }
@@ -116,15 +122,13 @@ struct AddExpenseView: View {
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraView { image in
-                    receiptImage = image
+                    receiptImages.append(image)
                     showCamera = false
                 }
                 .ignoresSafeArea()
             }
-            .sheet(isPresented: $showReceiptPreview) {
-                if let image = receiptImage {
-                    ReceiptPreviewSheet(image: image)
-                }
+            .sheet(item: $previewImage) { image in
+                ReceiptPreviewSheet(image: image)
             }
         }
     }
@@ -138,10 +142,12 @@ struct AddExpenseView: View {
             notes: notes,
             client: selectedClient
         )
-        if let image = receiptImage {
-            expense.receiptImageData = image.jpegData(compressionQuality: 0.8)
-        }
+        expense.receiptImagesData = receiptImages.compactMap { $0.jpegData(compressionQuality: 0.8) }
         modelContext.insert(expense)
         dismiss()
     }
+}
+
+extension UIImage: @retroactive Identifiable {
+    public var id: ObjectIdentifier { ObjectIdentifier(self) }
 }

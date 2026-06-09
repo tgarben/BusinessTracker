@@ -75,6 +75,12 @@ struct TimeTrackingView: View {
             .navigationTitle("Time Tracking")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+                ToolbarSpacer(placement: .topBarLeading)
+                ToolbarItem(placement: .topBarLeading) {
                     Menu {
                         Button("Clients") { showClients = true }
                         Button("Presets") { showPresets = true }
@@ -82,19 +88,13 @@ struct TimeTrackingView: View {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                    }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        if timerState.isRunning { showTimer = true }
-                        else { showTimer = true }
-                    } label: {
-                        Image(systemName: timerState.isRunning ? "timer" : "timer")
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showTimer = true } label: {
+                        Image(systemName: "timer")
                             .symbolEffect(.variableColor, isActive: timerState.isRunning)
                     }
+                }
+                ToolbarItem(placement: .primaryAction) {
                     Button { showLogTime = true } label: {
                         Image(systemName: "plus")
                     }
@@ -179,7 +179,7 @@ private struct WeekSummaryCard: View {
 
 // MARK: - Active Timer Card
 
-private struct ActiveTimerCard: View {
+struct ActiveTimerCard: View {
     @Environment(TimerState.self) private var timerState
 
     var body: some View {

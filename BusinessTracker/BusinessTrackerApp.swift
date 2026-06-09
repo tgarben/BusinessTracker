@@ -4,11 +4,16 @@ import SwiftData
 @main
 struct BusinessTrackerApp: App {
     @State private var timerState = TimerState()
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(timerState)
+            if hasCompletedOnboarding {
+                ContentView()
+                    .environment(timerState)
+            } else {
+                OnboardingView()
+            }
         }
         .modelContainer(for: [
             Expense.self,

@@ -20,8 +20,8 @@ struct LogTripView: View {
     @State private var isRoundTrip = false
 
     // Address mode
-    @State private var fromCompletion: MKLocalSearchCompletion?
-    @State private var toCompletion: MKLocalSearchCompletion?
+    @State private var fromResult: LocationResult?
+    @State private var toResult: LocationResult?
     @State private var fromLabel: String = ""
     @State private var toLabel: String = ""
     @State private var calculatedMiles: Double?
@@ -35,12 +35,10 @@ struct LogTripView: View {
     @State private var manualEndLocation: String = ""
     @State private var manualMiles: Double = 0
 
-    /// One-way miles before round trip multiplier
     private var oneWayMiles: Double {
         entryMode == .address ? (calculatedMiles ?? 0) : manualMiles
     }
 
-    /// Final miles to save
     private var totalMiles: Double {
         oneWayMiles * (isRoundTrip ? 2 : 1)
     }
@@ -56,7 +54,7 @@ struct LogTripView: View {
     private var reimbursement: Double { totalMiles * ratePerMile }
 
     private var canCalculate: Bool {
-        fromCompletion != nil && toCompletion != nil && !isCalculating
+        fromResult != nil && toResult != nil && !isCalculating
     }
 
     private var canSave: Bool {
@@ -86,7 +84,6 @@ struct LogTripView: View {
                     case .manual:  manualFields
                     }
 
-                    // Round trip toggle — shown once we have a distance
                     if oneWayMiles > 0 {
                         Toggle(isOn: $isRoundTrip) {
                             Label("Round Trip", systemImage: "arrow.triangle.2.circlepath")
@@ -141,18 +138,16 @@ struct LogTripView: View {
             }
             .onAppear { ratePerMile = savedRate }
             .sheet(isPresented: $showFromSearch) {
-                AddressSearchView(title: "From") { completion in
-                    fromCompletion = completion
-                    fromLabel = [completion.title, completion.subtitle]
-                        .filter { !$0.isEmpty }.joined(separator: ", ")
+                AddressSearchView(title: "From") { result in
+                    fromResult = result
+                    fromLabel = labelFor(result)
                     calculatedMiles = nil
                 }
             }
             .sheet(isPresented: $showToSearch) {
-                AddressSearchView(title: "To") { completion in
-                    toCompletion = completion
-                    toLabel = [completion.title, completion.subtitle]
-                        .filter { !$0.isEmpty }.joined(separator: ", ")
+                AddressSearchView(title: "To") { result in
+                    toResult = result
+                    toLabel = labelFor(result)
                     calculatedMiles = nil
                 }
             }
@@ -225,10 +220,17 @@ struct LogTripView: View {
         }
     }
 
-    // MARK: - Actions
+    // MARK: - Helpers
+
+    private func labelFor(_ result: LocationResult) -> String {
+        switch result {
+        case .completion(let c): return shortAddress(c)
+        case .coordinate(_, let label): return label
+        }
+    }
 
     private func calculateMiles() async {
-        guard let from = fromCompletion, let to = toCompletion else { return }
+        guard let from = fromResult, let to = toResult else { return }
         isCalculating = true
         calculationError = nil
         do {

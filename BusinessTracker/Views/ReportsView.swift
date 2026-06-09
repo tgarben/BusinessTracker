@@ -5,7 +5,6 @@ struct ReportsView: View {
     @Query private var timeEntries: [TimeEntry]
     @Query private var trips: [MileageTrip]
 
-    // Fuel settings — persisted in UserDefaults
     @AppStorage("report_mpg") private var mpg: Double = 30.0
     @AppStorage("report_gasPrice") private var gasPrice: Double = 3.80
 
@@ -37,12 +36,10 @@ struct ReportsView: View {
     private var totalMiles: Double        { monthTrips.reduce(0) { $0 + $1.miles } }
     private var totalReimbursement: Double { monthTrips.reduce(0) { $0 + $1.reimbursementAmount } }
 
-    // Fuel math
     private var estimatedGallons: Double  { mpg > 0 ? totalMiles / mpg : 0 }
     private var estimatedFuelCost: Double { estimatedGallons * gasPrice }
     private var netMileage: Double        { totalReimbursement - estimatedFuelCost }
 
-    // Top clients by hours
     private var topClients: [(name: String, hours: Double, earnings: Decimal)] {
         var map: [String: (hours: Double, earnings: Decimal)] = [:]
         for entry in monthEntries {
@@ -55,48 +52,51 @@ struct ReportsView: View {
             .sorted { $0.hours > $1.hours }
     }
 
+    private var hasData: Bool {
+        !monthEntries.isEmpty || !monthTrips.isEmpty
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                // MARK: Month at a glance
-                Section {
-                    glanceCard
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                }
-
-                // MARK: Mileage fuel analysis
-                if totalMiles > 0 {
-                    Section {
-                        fuelCard
+                if hasData {
+                    // MARK: Month at a glance
+                    Section(monthLabel) {
+                        glanceCard
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
-                    } header: {
-                        HStack {
-                            Text("Mileage Analysis")
-                            Spacer()
-                            Button("Edit") { showFuelSettings = true }
-                                .font(.caption)
+                    }
+
+                    // MARK: Mileage fuel analysis
+                    if totalMiles > 0 {
+                        Section {
+                            fuelCard
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                        } header: {
+                            HStack {
+                                Text("Mileage Analysis")
+                                Spacer()
+                                Button("Edit") { showFuelSettings = true }
+                                    .font(.caption)
+                            }
                         }
                     }
-                }
 
-                // MARK: Top clients
-                if !topClients.isEmpty {
-                    Section("Top Clients — \(monthLabel)") {
-                        ForEach(topClients, id: \.name) { client in
-                            ClientReportRow(
-                                name: client.name,
-                                hours: client.hours,
-                                earnings: client.earnings,
-                                totalHours: totalHours
-                            )
+                    // MARK: Top clients
+                    if !topClients.isEmpty {
+                        Section("Top Clients — \(monthLabel)") {
+                            ForEach(topClients, id: \.name) { client in
+                                ClientReportRow(
+                                    name: client.name,
+                                    hours: client.hours,
+                                    earnings: client.earnings,
+                                    totalHours: totalHours
+                                )
+                            }
                         }
                     }
-                }
-
-                // Empty state
-                if monthEntries.isEmpty && monthTrips.isEmpty {
+                } else {
                     Section {
                         ContentUnavailableView(
                             "No Data Yet",
@@ -164,13 +164,6 @@ struct ReportsView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .overlay(alignment: .topLeading) {
-            Text(monthLabel)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 16)
-        }
     }
 
     private func glanceItem(value: String, unit: String?, label: String, color: Color) -> some View {
@@ -191,7 +184,6 @@ struct ReportsView: View {
 
     private var fuelCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Inputs summary
             HStack(spacing: 16) {
                 fuelStat(label: "MPG", value: String(format: "%.0f", mpg), icon: "fuelpump.fill", color: .orange)
                 fuelStat(label: "Per Gallon", value: gasPrice.formatted(.currency(code: "USD")), icon: "dollarsign.circle.fill", color: .orange)
@@ -200,7 +192,6 @@ struct ReportsView: View {
 
             Divider()
 
-            // Net breakdown
             HStack(spacing: 0) {
                 netItem(label: "Reimbursement", value: totalReimbursement.formatted(.currency(code: "USD")), color: .green)
                 Text("−")

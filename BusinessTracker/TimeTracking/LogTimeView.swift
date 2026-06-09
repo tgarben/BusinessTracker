@@ -11,6 +11,8 @@ struct LogTimeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Client.name) private var clients: [Client]
 
+    @AppStorage("default_hourlyRate") private var defaultHourlyRate: Double = 0
+
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
     @State private var hourlyRate: Decimal = 0
@@ -156,6 +158,8 @@ struct LogTimeView: View {
                 if let p = prefillProject {
                     selectedProject = p
                     hourlyRate = p.hourlyRate
+                } else if defaultHourlyRate > 0 {
+                    hourlyRate = Decimal(defaultHourlyRate)
                 }
                 if let h = prefillHours {
                     hours = h

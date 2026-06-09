@@ -2,27 +2,27 @@ import SwiftUI
 import SwiftData
 
 struct SettingsView: View {
-    // Rates & Defaults
     @AppStorage("mileage_ratePerMile") private var mileageRate: Double = MileageTrip.defaultRatePerMile
     @AppStorage("default_hourlyRate") private var defaultHourlyRate: Double = 0
     @AppStorage("report_mpg") private var mpg: Double = 30.0
     @AppStorage("report_gasPrice") private var gasPrice: Double = 3.80
-
-    // Tax
     @AppStorage("tax_selfEmploymentRate") private var selfEmploymentRate: Double = 15.3
     @AppStorage("tax_incomeBracketRate") private var incomeBracketRate: Double = 22.0
     @AppStorage("tax_businessStructure") private var businessStructure: String = "Sole Proprietor"
 
     @State private var showClients = false
 
-    private let businessStructures = ["Sole Proprietor", "Single-Member LLC", "Multi-Member LLC", "S-Corp", "C-Corp", "Partnership"]
+    private let businessStructures = [
+        "Sole Proprietor", "Single-Member LLC", "Multi-Member LLC",
+        "S-Corp", "C-Corp", "Partnership"
+    ]
 
     var body: some View {
         NavigationStack {
             List {
 
                 // MARK: Business
-                Section {
+                Section("Business") {
                     Button {
                         showClients = true
                     } label: {
@@ -36,8 +36,6 @@ struct SettingsView: View {
                                 .foregroundStyle(.tertiary)
                         }
                     }
-                } header: {
-                    Text("Business")
                 }
 
                 // MARK: Rates & Defaults
@@ -100,10 +98,15 @@ struct SettingsView: View {
 
                 // MARK: Tax Information
                 Section {
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "building.columns.fill", color: .green)
-                        Picker("Business Structure", selection: $businessStructure) {
+                    // Business structure — full-width picker via LabeledContent
+                    LabeledContent {
+                        Picker("", selection: $businessStructure) {
                             ForEach(businessStructures, id: \.self) { Text($0) }
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            SettingsIcon(symbol: "building.columns.fill", color: .green)
+                            Text("Structure")
                         }
                     }
 
@@ -118,7 +121,7 @@ struct SettingsView: View {
                     } label: {
                         HStack(spacing: 10) {
                             SettingsIcon(symbol: "percent", color: .green)
-                            Text("Self-Employment Tax")
+                            Text("SE Tax Rate")
                         }
                     }
 
@@ -133,7 +136,7 @@ struct SettingsView: View {
                     } label: {
                         HStack(spacing: 10) {
                             SettingsIcon(symbol: "chart.line.uptrend.xyaxis", color: .green)
-                            Text("Income Tax Bracket")
+                            Text("Income Bracket")
                         }
                     }
                 } header: {

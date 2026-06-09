@@ -23,6 +23,7 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 | Feature | Status |
 |---|---|
 | App shell (TabView, SwiftData container) | ✅ Done |
+| Home Screen | ✅ Done |
 | Time Tracking | ✅ Done |
 | Mileage Tracking | ✅ Done |
 | Expense Tracking | 🔶 In progress (core done, receipt photo done) |
@@ -38,6 +39,16 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 
 ---
 
+## Tab bar navigation
+
+**Current tabs:** Home · Time · Mileage · Expenses · Reports (5 tabs, at iOS limit)
+
+- **Settings** is accessible via a ⚙️ gear icon in the **top-left toolbar on every screen** — opens as a sheet
+- **Income** tab is removed until the feature is built — placeholder view and model still exist in codebase
+- Tab order reflects daily-use priority: Home first, then the three active tracking tabs, Reports last
+
+---
+
 ## Data models
 
 - **`Client`** — `name`. Container only; rate lives on Project.
@@ -50,6 +61,17 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **`TimerState`** — `@Observable` class (not SwiftData). Persists active timer start date to `UserDefaults` so timer survives backgrounding.
 
 ---
+
+## Home Screen — key decisions & current state
+
+- **Purpose:** launchpad + at-a-glance status, not a duplicate of Reports
+- **Quick Actions:** four list rows — Start/View Timer, Log Time, Log Trip, Add Expense. Each opens the relevant existing sheet directly
+- **Today at a glance:** three stat cells (hours, miles, spend) in a single divider-separated list row. Stats go muted when empty
+- **This week:** hours + earnings cells with per-day average subtitle
+- **Active timer card** floats at the top when a timer is running (same `ActiveTimerCard` component reused from `TimeTrackingView`)
+- Uses `List` with `.insetGrouped` style — matches all other screens, correct dark mode contrast automatically
+- Greeting in the nav title changes by time of day (morning / afternoon / evening)
+- `ActiveTimerCard` is `internal` (not `private`) so both `HomeView` and `TimeTrackingView` can use it
 
 ## Time Tracking — key decisions & current state
 
@@ -90,13 +112,34 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Top clients:** ranked by hours, with proportional bar + earnings. Uses indigo badge matching `TimeEntryRow` style
 - Reports is the convergence point for all four data types — will grow as Expenses and Income are built out
 
+## Settings & Profile — key decisions & current state
+
+- Accessed via gear icon (top-left toolbar) on every screen — not a tab
+- **Business:** links to `ClientListView` for managing clients + projects
+- **Rates & Defaults:** IRS mileage rate (live, persisted), default hourly rate
+- **Fuel:** MPG + gas price (shared with Reports fuel analysis card)
+- **Tax Information:** business structure picker, SE tax rate, income bracket rate
+- **App:** currency placeholder, app version from bundle
+- Keyboard dismisses on scroll (`scrollDismissesKeyboard(.immediately)`)
+
+**`@AppStorage` keys used in Settings:**
+- `mileage_ratePerMile` — IRS rate, defaults to `MileageTrip.defaultRatePerMile` (0.70)
+- `default_hourlyRate` — fallback hourly rate when no project rate is set
+- `report_mpg` — vehicle MPG for fuel analysis
+- `report_gasPrice` — gas price per gallon
+- `tax_selfEmploymentRate` — SE tax % (default 15.3)
+- `tax_incomeBracketRate` — income tax bracket % (default 22.0)
+- `tax_businessStructure` — business entity type string
+
+`MileageTrip.ratePerMile` is now a computed static that reads from `UserDefaults` (`mileage_ratePerMile`) with a fallback to `defaultRatePerMile`. `LogTripView` syncs its local rate state from `@AppStorage` on appear.
+
 ---
 
 ## Row / visual design language (consistent across all sections)
 
 - **Title row:** entity name (bold semibold) + colored amount/hours badge (capsule pill) on the right
 - **Detail row:** small icon column (10–12pt) + label text + Spacer + prominent value (`.subheadline.weight(.medium)`)
-- **Color coding:** Time = indigo, Mileage = blue, Expenses = red, (Income = TBD)
+- **Color coding:** Time = indigo, Mileage = blue, Expenses = red, Income = TBD
 - Notes always last, `.caption`, `.tertiary`, `lineLimit(1)`
 - `.padding(.vertical, 4)` on all rows
 
@@ -116,9 +159,11 @@ BusinessTracker/
 │   ├── MileageTrip.swift
 │   ├── Expense.swift
 │   └── IncomeEntry.swift
+├── Home/
+│   └── HomeView.swift
 ├── TimeTracking/
 │   ├── TimerState.swift
-│   ├── TimeTrackingView.swift
+│   ├── TimeTrackingView.swift       (also contains ActiveTimerCard — internal, shared with HomeView)
 │   ├── TimerSheet.swift
 │   ├── LogTimeView.swift
 │   ├── TimeEntryEditView.swift
@@ -132,21 +177,42 @@ BusinessTracker/
 │   ├── AddressSearchView.swift
 │   ├── LogTripView.swift
 │   ├── MileageTripEditView.swift
-│   ├── MileageView.swift
+│   ├── MileageView.swift            (also contains MileageSummaryCard, TripRow)
 │   ├── MileageHistoryView.swift
 │   └── MileageMonthDetailView.swift
 ├── Expenses/
-│   ├── ExpensesView.swift
+│   ├── ExpensesView.swift           (also contains ExpenseSummaryCard, ExpenseRow)
 │   ├── AddExpenseView.swift
 │   ├── ExpenseEditView.swift
-│   └── CameraView.swift          (also contains ReceiptPreviewSheet)
+│   ├── ExpenseHistoryView.swift
+│   ├── ExpenseMonthDetailView.swift
+│   └── CameraView.swift             (also contains ReceiptPreviewSheet)
 ├── Settings/
-│   └── SettingsView.swift        (also contains SettingsIcon helper)
+│   └── SettingsView.swift           (also contains SettingsIcon helper)
+├── Onboarding/
+│   └── OnboardingView.swift          (4 pages: welcome, location, notifications, ready)
 └── Views/
-    ├── IncomeView.swift           (placeholder)
-    ├── ReportsView.swift          (in progress)
+    ├── IncomeView.swift              (placeholder — no tab until feature is built)
+    ├── ReportsView.swift             (in progress)
     └── PlaceholderView.swift
 ```
+
+---
+
+## What's left to build
+
+**Near term (logical next steps):**
+- **Income tab** — `IncomeEntry` model exists, needs full UI: log income, list view, edit view, month summary card
+- **Reports expansion** — add expenses section, tax set-aside estimate (uses Settings tax rates), date range picker (week / month / quarter / year)
+
+**Settings gaps:**
+- Quarterly tax payment due dates (UI not built)
+- Data export (CSV / PDF) — needs implementation
+- Account / iCloud sync — future, requires CloudKit ModelContainer swap
+
+**Polish / UX:**
+- Consider moving Clients & Projects out of Time Tracking `⋯` menu entirely once Settings feels like the right home
+- Home screen quick actions layout — currently a list; 2×2 card grid was attempted but had dark mode rendering issues. Worth revisiting with a different approach
 
 ---
 
@@ -157,7 +223,11 @@ BusinessTracker/
 - `ContentUnavailableView` for all empty states
 - Entries grouped by date, swipe-to-delete on all lists
 - All sheets use `NavigationStack` with Cancel/Save (or Done) toolbar items
-- Shared reusable components: `MileageSummaryCard`, `TripRow` (both in `MileageView.swift`), `ExpenseSummaryCard`, `ExpenseRow` (both in `Expenses/ExpensesView.swift`)
+- Gear icon (⚙️) always top-left toolbar, opens Settings as a sheet, always its own separate Liquid Glass pill
+- `ToolbarSpacer(placement: .topBarLeading)` separates the gear from adjacent leading toolbar items to prevent iOS 26 Liquid Glass pill grouping
+- Quick actions on Home are standard list rows inside a `Section` — clean, dark-mode safe, no custom backgrounds needed
+
+---
 
 ## Planned platform extensions (not started)
 
@@ -168,46 +238,7 @@ BusinessTracker/
 
 All four features will require a separate app extension target and careful thought around SwiftData container sharing (App Groups).
 
-## Settings & Profile (not started)
-
-Central configuration tab — things you set once that persist everywhere. Planned sections:
-
-**Business / Clients**
-- Manage clients and projects (move here from the Time Tracking `⋯` menu eventually)
-
-**Rates & Defaults**
-- IRS mileage rate (currently hardcoded at `0.70` in `MileageTrip.ratePerMile` — should be user-editable each tax year without a code change)
-- Default hourly rate (fallback when no project rate is set)
-- Fuel settings — MPG + gas price (currently `@AppStorage` accessed only from Reports; should surface here too)
-
-**Tax Information**
-- Business structure (sole proprietor, LLC, S-corp, etc.)
-- Estimated self-employment tax rate (~15.3% default)
-- Estimated federal/state income tax bracket
-- Quarterly payment due dates
-- Used by Reports to show a "set aside for taxes" figure alongside earnings
-
-**App**
-- Currency (groundwork for future international support)
-- App icon / theme (Pro tier candidate)
-
-**Account (future)**
-- Sign in / create account
-- iCloud sync via CloudKit-backed `ModelContainer` (swap from local-only when ready)
-- Data export (CSV / PDF)
-
-**Key decision:** name the tab "Settings" until a real account system exists — "Account" will feel hollow with no auth.
-
-**`@AppStorage` keys used in Settings:**
-- `mileage_ratePerMile` — IRS rate, defaults to `MileageTrip.defaultRatePerMile` (0.70)
-- `default_hourlyRate` — fallback hourly rate when no project rate is set
-- `report_mpg` — vehicle MPG for fuel analysis
-- `report_gasPrice` — gas price per gallon
-- `tax_selfEmploymentRate` — SE tax % (default 15.3)
-- `tax_incomeBracketRate` — income tax bracket % (default 22.0)
-- `tax_businessStructure` — business entity type string
-
-`MileageTrip.ratePerMile` is now a computed static that reads from `UserDefaults` (`mileage_ratePerMile`) with a fallback to `defaultRatePerMile`. `LogTripView` syncs its local rate state from `@AppStorage` on appear.
+---
 
 ## Known patterns / gotchas
 
@@ -216,4 +247,8 @@ Central configuration tab — things you set once that persist everywhere. Plann
 - `TimerState.stop()` clears client/project — always capture them into locals before calling it
 - `Text +` concatenation is deprecated in iOS 26 — use string interpolation instead
 - `Decimal(string:)` used for amount parsing from text fields — handles currency input safely
-- `@AppStorage` used for fuel settings (MPG, gas price) in Reports — keys: `report_mpg`, `report_gasPrice`
+- `Color.tertiary` doesn't exist as a `Color` — use `.foregroundStyle(.tertiary)` or `AnyShapeStyle(.tertiary)` when mixing with `Color` in a ternary
+- `scrollDismissesKeyboard(.immediately)` added to Settings form — pattern to reuse on any form with number fields
+- `ToolbarSpacer(placement:)` is an iOS 26 API — use it to break Liquid Glass grouping between toolbar items in the same placement
+- Onboarding gated by `@AppStorage("hasCompletedOnboarding")` — set to `false` in UserDefaults to re-trigger for testing
+- `ITSAppUsesNonExemptEncryption = NO` is set in build settings (both Debug and Release) via `INFOPLIST_KEY_ITSAppUsesNonExemptEncryption` — no more TestFlight export compliance prompts

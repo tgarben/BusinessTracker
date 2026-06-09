@@ -13,11 +13,11 @@ struct ExpenseEditView: View {
     @State private var category: String
     @State private var selectedClient: Client?
     @State private var notes: String
-    @State private var receiptImage: UIImage?
+    @State private var receiptImages: [UIImage]
 
-    @State private var receiptItem: PhotosPickerItem?
+    @State private var newReceiptItem: PhotosPickerItem?
     @State private var showCamera = false
-    @State private var showReceiptPreview = false
+    @State private var previewImage: UIImage?
 
     init(expense: Expense) {
         self.expense = expense
@@ -26,9 +26,14 @@ struct ExpenseEditView: View {
         _category = State(initialValue: expense.category)
         _selectedClient = State(initialValue: expense.client)
         _notes = State(initialValue: expense.notes)
-        if let data = expense.receiptImageData {
-            _receiptImage = State(initialValue: UIImage(data: data))
+
+        // Migrate legacy single-image field on first edit
+        var images: [UIImage] = expense.receiptImagesData.compactMap { UIImage(data: $0) }
+        if images.isEmpty, let legacyData = expense.receiptImageData,
+           let legacyImage = UIImage(data: legacyData) {
+            images = [legacyImage]
         }
+        _receiptImages = State(initialValue: images)
     }
 
     private var canSave: Bool {
@@ -42,9 +47,12 @@ struct ExpenseEditView: View {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
 
                     LabeledContent("Amount") {
-                        TextField("$0.00", text: $amountText)
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                        HStack(spacing: 2) {
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("0.00", text: $amountText)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                        }
                     }
 
                     Picker("Category", selection: $category) {
@@ -68,43 +76,52 @@ struct ExpenseEditView: View {
                         .lineLimit(3...6)
                 }
 
-                Section("Receipt") {
-                    if let image = receiptImage {
-                        HStack {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 64, height: 64)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .onTapGesture { showReceiptPreview = true }
+                Section("Receipts") {
+                    if !receiptImages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(receiptImages.indices, id: \.self) { index in
+                                    ZStack(alignment: .topTrailing) {
+                                        Image(uiImage: receiptImages[index])
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 72, height: 72)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            .onTapGesture { previewImage = receiptImages[index] }
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Receipt attached")
-                                    .font(.subheadline)
-                                Button("Remove", role: .destructive) {
-                                    receiptImage = nil
-                                    receiptItem = nil
-                                }
-                                .font(.caption)
-                            }
-                            .padding(.leading, 4)
-                        }
-                    } else {
-                        PhotosPicker(selection: $receiptItem, matching: .images) {
-                            Label("Choose from Library", systemImage: "photo.on.rectangle")
-                        }
-                        .onChange(of: receiptItem) { _, item in
-                            Task {
-                                if let data = try? await item?.loadTransferable(type: Data.self),
-                                   let image = UIImage(data: data) {
-                                    receiptImage = image
+                                        Button {
+                                            receiptImages.remove(at: index)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 20))
+                                                .symbolRenderingMode(.palette)
+                                                .foregroundStyle(.white, .black.opacity(0.55))
+                                        }
+                                        .offset(x: 6, y: -6)
+                                    }
                                 }
                             }
+                            .padding(.horizontal, 2)
+                            .padding(.vertical, 10)
                         }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    }
 
-                        Button { showCamera = true } label: {
-                            Label("Take Photo", systemImage: "camera")
+                    PhotosPicker(selection: $newReceiptItem, matching: .images) {
+                        Label("Add from Library", systemImage: "photo.on.rectangle")
+                    }
+                    .onChange(of: newReceiptItem) { _, item in
+                        Task {
+                            if let data = try? await item?.loadTransferable(type: Data.self),
+                               let image = UIImage(data: data) {
+                                receiptImages.append(image)
+                                newReceiptItem = nil
+                            }
                         }
+                    }
+
+                    Button { showCamera = true } label: {
+                        Label("Take Photo", systemImage: "camera")
                     }
                 }
             }
@@ -121,15 +138,13 @@ struct ExpenseEditView: View {
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraView { image in
-                    receiptImage = image
+                    receiptImages.append(image)
                     showCamera = false
                 }
                 .ignoresSafeArea()
             }
-            .sheet(isPresented: $showReceiptPreview) {
-                if let image = receiptImage {
-                    ReceiptPreviewSheet(image: image)
-                }
+            .sheet(item: $previewImage) { image in
+                ReceiptPreviewSheet(image: image)
             }
         }
     }
@@ -140,7 +155,11 @@ struct ExpenseEditView: View {
         expense.category = category
         expense.client = selectedClient
         expense.notes = notes
-        expense.receiptImageData = receiptImage?.jpegData(compressionQuality: 0.8)
+        expense.receiptImagesData = receiptImages.compactMap { $0.jpegData(compressionQuality: 0.8) }
+        // Clear legacy field after migration
+        if expense.receiptImageData != nil {
+            expense.receiptImageData = nil
+        }
         dismiss()
     }
 }

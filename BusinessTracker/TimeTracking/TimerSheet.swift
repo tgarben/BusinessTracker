@@ -8,6 +8,8 @@ struct TimerSheet: View {
     @Query(sort: \Client.name) private var clients: [Client]
     @Query(sort: \TimePreset.sortOrder) private var presets: [TimePreset]
 
+    @AppStorage("default_hourlyRate") private var defaultHourlyRate: Double = 0
+
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
     @State private var activePreset: TimePreset?   // preset used to start this session
@@ -179,8 +181,8 @@ struct TimerSheet: View {
         let project = timerState.project
         let hours   = timerState.stop()
 
-        // Preset overrides take priority; fall back to project rate
-        let rate  = activePreset?.effectiveRate ?? project?.hourlyRate ?? 0
+        // Preset overrides take priority; fall back to project rate, then global default
+        let rate  = activePreset?.effectiveRate ?? project?.hourlyRate ?? (defaultHourlyRate > 0 ? Decimal(defaultHourlyRate) : 0)
         let notes = activePreset?.notesTemplate ?? ""
 
         let entry = TimeEntry(

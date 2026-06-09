@@ -5,7 +5,6 @@ struct MileageHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \MileageTrip.date, order: .reverse) private var allTrips: [MileageTrip]
 
-    /// All unique month start dates that have at least one trip, most recent first
     private var months: [Date] {
         let cal = Calendar.current
         let starts = Set(allTrips.map { cal.startOfMonth(for: $0.date) })
@@ -17,25 +16,41 @@ struct MileageHistoryView: View {
             List {
                 ForEach(months, id: \.self) { monthStart in
                     let monthTrips = trips(for: monthStart)
-                    let miles = monthTrips.reduce(0) { $0 + $1.miles }
-                    let reimbursement = monthTrips.reduce(0) { $0 + $1.reimbursementAmount }
+                    let miles = monthTrips.reduce(0.0) { $0 + $1.miles }
+                    let reimbursement = monthTrips.reduce(0.0) { $0 + $1.reimbursementAmount }
+                    let count = monthTrips.count
 
                     NavigationLink {
                         MileageMonthDetailView(monthStart: monthStart)
                     } label: {
-                        VStack(spacing: 0) {
-                            MileageSummaryCard(
-                                miles: miles,
-                                reimbursement: reimbursement,
-                                label: monthStart.formatted(.dateTime.month(.wide).year())
-                            )
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(alignment: .center) {
+                                Text(monthStart.formatted(.dateTime.month(.wide).year()))
+                                    .font(.headline)
+                                Spacer()
+                                Text(String(format: "%.1f mi", miles))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.blue)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(.blue.opacity(0.12), in: Capsule())
+                            }
+                            HStack(spacing: 4) {
+                                Text("\(count) \(count == 1 ? "trip" : "trips")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("·")
+                                    .foregroundStyle(.tertiary)
+                                Text(reimbursement, format: .currency(code: "USD"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
                 }
             }
-            .listStyle(.plain)
+            .listStyle(.insetGrouped)
             .navigationTitle("Mileage History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
