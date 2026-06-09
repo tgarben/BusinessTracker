@@ -26,7 +26,7 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 | Home Screen | ✅ Done |
 | Time Tracking | ✅ Done |
 | Mileage Tracking | ✅ Done |
-| Expense Tracking | 🔶 In progress (core done, receipt photo done) |
+| Expense Tracking | 🔶 In progress (core done, multi-receipt done) |
 | Income & Tax Projection | ⬜ Not started |
 | Reports & Analytics | 🔶 In progress (month glance, mileage fuel analysis, top clients) |
 | Settings & Profile | 🔶 In progress (core sections done) |
@@ -56,7 +56,7 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **`TimeEntry`** — `date`, `client?`, `project?`, `hours`, `hourlyRate` (snapshot), `notes`
 - **`TimePreset`** — `name`, `client?`, `project?`, `sortOrder`, `hourlyRateOverride?`, `notesTemplate`
 - **`MileageTrip`** — `date`, `startLocation`, `endLocation`, `miles`, `purpose`, `notes`. Computed `reimbursementAmount` using `ratePerMile` (IRS rate, currently 0.70)
-- **`Expense`** — `date`, `amount`, `category`, `notes`, `receiptImageData?`, `client?` (optional link). Categories defined in `Expense.categories`. Helper statics: `categoryIcon(_:)`, `categoryColor(_:)`
+- **`Expense`** — `date`, `amount`, `category`, `notes`, `receiptImageData?` (legacy — kept for migration), `receiptImagesData: [Data]` (current multi-image storage), `client?` (optional link). Categories defined in `Expense.categories`. Helper statics: `categoryIcon(_:)`, `categoryColor(_:)`
 - **`IncomeEntry`** — `date`, `source`, `amount`, `notes` (placeholder model, view not built)
 - **`TimerState`** — `@Observable` class (not SwiftData). Persists active timer start date to `UserDefaults` so timer survives backgrounding.
 
@@ -90,16 +90,22 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 ## Mileage Tracking — key decisions & current state
 
 - **Two entry modes:** Address (MapKit autocomplete + MKDirections driving distance) or Manual (type miles, works offline)
+- **Address autocomplete:** uses `AddressSearchView` which wraps `AddressSearcher` (MKLocalSearchCompleter). Callback delivers a `LocationResult` enum — either `.completion(MKLocalSearchCompletion)` or `.coordinate(CLLocationCoordinate2D, label: String)`.
+- **Current location:** "Use Current Location" row at the top of `AddressSearchView`. Uses `LocationManager` (@Observable, CLLocationManagerDelegate) to request location, then CLGeocoder to reverse-geocode to a label. Requires `NSLocationWhenInUseUsageDescription` (already in build settings).
+- **Address label format:** stored addresses use `shortAddress(_:)` helper — strips country from MapKit subtitle, keeps city + state for POIs (drops street from subtitle so result is "Place Name, City, State"), keeps "Street, City, State" for plain addresses.
 - **Round trip toggle** appears once a distance is calculated; shows each-way + total breakdown
 - **Month summary card** at top of Mileage screen
-- **History button** (toolbar) → `MileageHistoryView`: months listed as tappable summary cards → `MileageMonthDetailView`: that month's trips with summary card + grouped list
-- **Tap any trip** (in both `MileageView` and `MileageMonthDetailView`) to open `MileageTripEditView` — manual edit of all fields
+- **History button** (toolbar) → `MileageHistoryView`: months listed as rows with month name bold + miles badge + trip count — `MileageMonthDetailView`: that month's trips with summary card + grouped list
+- **Tap any trip** (in both `MileageView` and `MileageMonthDetailView`) to open `MileageTripEditView`
+- **`MileageTripEditView`** has a Manual / Address mode toggle matching `LogTripView` — switch to Address mode to pick new locations and recalculate distance
 
 ## Expense Tracking — key decisions & current state
 
 - **Categories:** Supplies, Equipment, Software, Travel, Meals, Marketing, Utilities, Rent, Insurance, Other — each has an SF Symbol icon and color defined in `Expense` statics
 - **Client link:** optional — expense can be standalone or linked to a `Client`
-- **Receipt photo:** attach from photo library (`PhotosPicker`) or capture via camera (`CameraView` UIImagePickerController wrapper). Stored as JPEG data on the model. Thumbnail shown in row (paperclip indicator) and full-screen preview via `ReceiptPreviewSheet`
+- **Multiple receipts:** attach multiple images per expense via `PhotosPicker` (library) or `CameraView` (camera). Stored as `receiptImagesData: [Data]` on the model. Thumbnails shown in a horizontal scroll row in Add/Edit views; each has an × remove button. `ExpenseRow` shows a paperclip icon + count badge.
+- **Legacy migration:** old `receiptImageData: Data?` field is preserved on the model. `ExpenseEditView` migrates it into `receiptImagesData` on first open and clears the old field on save.
+- **Amount field:** displays a `$` prefix label beside the text input in both Add and Edit views. Parsed via `Decimal(string:)` on save.
 - **Tap any entry** to open `ExpenseEditView`
 - **Month summary card** shows total spend + transaction count
 - `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` must be in Info.plist for camera/photo on real device
@@ -107,7 +113,8 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 ## Reports — key decisions & current state
 
 - **Scope:** currently month-only (current calendar month)
-- **Month at a glance card:** 2×2 grid — hours + earnings (indigo), miles + reimbursement (blue)
+- **Empty state:** entire report content is hidden when there is no data for the current month — only `ContentUnavailableView` is shown
+- **Month at a glance card:** 2×2 grid — hours + earnings (indigo), miles + reimbursement (blue). Month label is the `Section` header above the card (not overlaid on the card).
 - **Mileage fuel analysis card:** MPG + gas price (stored in `@AppStorage`) → estimated gallons used → fuel cost vs reimbursement → net. "Edit" button in section header opens `FuelSettingsSheet`
 - **Top clients:** ranked by hours, with proportional bar + earnings. Uses indigo badge matching `TimeEntryRow` style
 - Reports is the convergence point for all four data types — will grow as Expenses and Income are built out
@@ -118,7 +125,7 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Business:** links to `ClientListView` for managing clients + projects
 - **Rates & Defaults:** IRS mileage rate (live, persisted), default hourly rate
 - **Fuel:** MPG + gas price (shared with Reports fuel analysis card)
-- **Tax Information:** business structure picker, SE tax rate, income bracket rate
+- **Tax Information:** business structure picker (label shortened to "Structure" to prevent truncation), SE tax rate (label: "SE Tax Rate"), income bracket rate (label: "Income Bracket")
 - **App:** currency placeholder, app version from bundle
 - Keyboard dismisses on scroll (`scrollDismissesKeyboard(.immediately)`)
 
@@ -142,6 +149,7 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Color coding:** Time = indigo, Mileage = blue, Expenses = red, Income = TBD
 - Notes always last, `.caption`, `.tertiary`, `lineLimit(1)`
 - `.padding(.vertical, 4)` on all rows
+- **History list rows** (Mileage + Expenses): month name as `.headline` primary text, colored badge on the right, secondary info (count + amount) below — not full summary cards
 
 ---
 
@@ -173,10 +181,10 @@ BusinessTracker/
 │   ├── PresetsView.swift
 │   └── (AddEditPresetView is inside PresetsView.swift)
 ├── Mileage/
-│   ├── AddressSearcher.swift
-│   ├── AddressSearchView.swift
+│   ├── AddressSearcher.swift        (AddressSearcher, LocationManager, LocationResult, shortAddress, calculateDrivingMiles)
+│   ├── AddressSearchView.swift      (current location row + MKLocalSearchCompletion results)
 │   ├── LogTripView.swift
-│   ├── MileageTripEditView.swift
+│   ├── MileageTripEditView.swift    (Manual / Address mode toggle, same as LogTripView)
 │   ├── MileageView.swift            (also contains MileageSummaryCard, TripRow)
 │   ├── MileageHistoryView.swift
 │   └── MileageMonthDetailView.swift
@@ -246,9 +254,12 @@ All four features will require a separate app extension target and careful thoug
 - SwiftData filtered `@Query` in detail views uses custom `init` with `#Predicate`
 - `TimerState.stop()` clears client/project — always capture them into locals before calling it
 - `Text +` concatenation is deprecated in iOS 26 — use string interpolation instead
-- `Decimal(string:)` used for amount parsing from text fields — handles currency input safely
+- `Decimal(string:)` used for amount parsing from text fields — handles currency input safely. Strip any `$` prefix before passing if the field displays one.
 - `Color.tertiary` doesn't exist as a `Color` — use `.foregroundStyle(.tertiary)` or `AnyShapeStyle(.tertiary)` when mixing with `Color` in a ternary
 - `scrollDismissesKeyboard(.immediately)` added to Settings form — pattern to reuse on any form with number fields
 - `ToolbarSpacer(placement:)` is an iOS 26 API — use it to break Liquid Glass grouping between toolbar items in the same placement
 - Onboarding gated by `@AppStorage("hasCompletedOnboarding")` — set to `false` in UserDefaults to re-trigger for testing
 - `ITSAppUsesNonExemptEncryption = NO` is set in build settings (both Debug and Release) via `INFOPLIST_KEY_ITSAppUsesNonExemptEncryption` — no more TestFlight export compliance prompts
+- `MKLocalSearchCompletion` cannot be instantiated directly — address search uses `LocationResult` enum (`.completion` or `.coordinate`) to handle both MapKit results and current-location coordinates uniformly
+- `UIImage` conforms to `Identifiable` via a `@retroactive` extension in `AddExpenseView.swift` — needed for `.sheet(item:)` on the receipt preview. Do not add a second conformance elsewhere.
+- SwiftData supports adding new properties with default values as a lightweight migration — adding `receiptImagesData: [Data]` alongside the old `receiptImageData: Data?` required no manual migration schema
