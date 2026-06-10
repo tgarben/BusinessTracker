@@ -7,7 +7,6 @@ struct TimeTrackingView: View {
 
     @State private var showLogTime = false
     @State private var showTimer = false
-    @State private var showClients = false
     @State private var showPresets = false
     @State private var showSettings = false
     @State private var entryToEdit: TimeEntry?
@@ -81,10 +80,7 @@ struct TimeTrackingView: View {
                 }
                 ToolbarSpacer(placement: .topBarLeading)
                 ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button("Clients") { showClients = true }
-                        Button("Presets") { showPresets = true }
-                    } label: {
+                    Button { showPresets = true } label: {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
@@ -106,9 +102,6 @@ struct TimeTrackingView: View {
             .sheet(isPresented: $showTimer) {
                 TimerSheet()
                     .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $showClients) {
-                ClientListView()
             }
             .sheet(isPresented: $showPresets) {
                 PresetsView()
