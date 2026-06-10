@@ -96,18 +96,18 @@ struct ReportsView: View {
                             }
                         }
                     }
-                } else {
-                    Section {
-                        ContentUnavailableView(
-                            "No Data Yet",
-                            systemImage: "chart.bar",
-                            description: Text("Log time or trips to see your monthly report.")
-                        )
-                        .listRowBackground(Color.clear)
-                    }
                 }
             }
             .listStyle(.insetGrouped)
+            .overlay {
+                if !hasData {
+                    ContentUnavailableView(
+                        "No Data Yet",
+                        systemImage: "chart.bar",
+                        description: Text("Log time or trips to see your monthly report.")
+                    )
+                }
+            }
             .navigationTitle("Reports")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -183,63 +183,81 @@ struct ReportsView: View {
     // MARK: - Fuel card
 
     private var fuelCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 16) {
-                fuelStat(label: "MPG", value: String(format: "%.0f", mpg), icon: "fuelpump.fill", color: .orange)
-                fuelStat(label: "Per Gallon", value: gasPrice.formatted(.currency(code: "USD")), icon: "dollarsign.circle.fill", color: .orange)
-                fuelStat(label: "Gallons Used", value: String(format: "%.1f", estimatedGallons), icon: "drop.fill", color: .orange)
-            }
-
-            Divider()
-
+        VStack(spacing: 0) {
+            // Input stats row
             HStack(spacing: 0) {
-                netItem(label: "Reimbursement", value: totalReimbursement.formatted(.currency(code: "USD")), color: .green)
-                Text("−")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                netItem(label: "Fuel Cost", value: estimatedFuelCost.formatted(.currency(code: "USD")), color: .red)
-                Text("=")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                netItem(
-                    label: "Net",
-                    value: netMileage.formatted(.currency(code: "USD")),
-                    color: netMileage >= 0 ? .green : .red
-                )
+                fuelInputChip(value: String(format: "%.0f", mpg), label: "MPG", icon: "fuelpump.fill")
+                fuelDivider()
+                fuelInputChip(value: gasPrice.formatted(.currency(code: "USD")), label: "Per Gallon", icon: "dollarsign.circle.fill")
+                fuelDivider()
+                fuelInputChip(value: String(format: "%.1f gal", estimatedGallons), label: "Est. Used", icon: "drop.fill")
             }
+            .padding(.vertical, 14)
+
+            Divider().padding(.horizontal, 16)
+
+            // Breakdown rows
+            VStack(spacing: 0) {
+                fuelBreakdownRow(label: "IRS Reimbursement", value: totalReimbursement.formatted(.currency(code: "USD")), color: .primary)
+                fuelBreakdownRow(label: "Estimated Fuel Cost", value: "−\(estimatedFuelCost.formatted(.currency(code: "USD")))", color: .red)
+            }
+            .padding(.vertical, 4)
+
+            Divider().padding(.horizontal, 16)
+
+            // Net result row
+            HStack {
+                Text("Net Profit")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(netMileage.formatted(.currency(code: "USD")))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(netMileage >= 0 ? .green : .red)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background((netMileage >= 0 ? Color.green : Color.red).opacity(0.12), in: Capsule())
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
-        .padding(16)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
     }
 
-    private func fuelStat(label: String, value: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    private func fuelInputChip(value: String, label: String, icon: String) -> some View {
+        VStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundStyle(color)
+                .foregroundStyle(.orange)
             Text(value)
                 .font(.subheadline.weight(.semibold))
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func netItem(label: String, value: String, color: Color) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(color)
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func fuelDivider() -> some View {
+        Rectangle()
+            .fill(.separator)
+            .frame(width: 0.5)
+            .padding(.vertical, 8)
+    }
+
+    private func fuelBreakdownRow(label: String, value: String, color: Color) -> some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
     }
 }
 

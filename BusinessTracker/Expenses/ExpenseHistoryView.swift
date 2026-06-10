@@ -38,6 +38,7 @@ struct ExpenseHistoryView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 4)
                     }
                 }

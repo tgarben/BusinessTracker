@@ -42,16 +42,7 @@ struct TimeTrackingView: View {
                 }
 
                 // Entries grouped by date
-                if entries.isEmpty {
-                    Section {
-                        ContentUnavailableView(
-                            "No Time Logged",
-                            systemImage: "clock",
-                            description: Text("Tap + to log hours or start a timer.")
-                        )
-                        .listRowBackground(Color.clear)
-                    }
-                } else {
+                if !entries.isEmpty {
                     let grouped = Dictionary(grouping: entries) {
                         Calendar.current.startOfDay(for: $0.date)
                     }
@@ -72,6 +63,15 @@ struct TimeTrackingView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .overlay {
+                if entries.isEmpty {
+                    ContentUnavailableView(
+                        "No Time Logged",
+                        systemImage: "clock",
+                        description: Text("Tap + to log hours or start a timer.")
+                    )
+                }
+            }
             .navigationTitle("Time Tracking")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

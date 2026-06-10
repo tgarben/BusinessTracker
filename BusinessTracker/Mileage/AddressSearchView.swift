@@ -9,10 +9,12 @@ struct AddressSearchView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var searcher = AddressSearcher()
     @State private var locationManager = LocationManager()
+    @State private var store = RecentAddressStore()
 
     var body: some View {
         NavigationStack {
             List {
+                // MARK: Current location
                 Section {
                     Button {
                         locationManager.requestCurrentLocation()
@@ -32,36 +34,70 @@ struct AddressSearchView: View {
                     .disabled(locationManager.isLocating)
                 }
 
-                if !searcher.query.isEmpty {
-                    if searcher.isSearching {
+                // MARK: Body — recents or search results
+                if searcher.query.isEmpty {
+                    if !store.recents.isEmpty {
                         Section {
-                            HStack { Spacer(); ProgressView(); Spacer() }
-                                .listRowBackground(Color.clear)
-                        }
-                    } else if searcher.results.isEmpty {
-                        Section {
-                            ContentUnavailableView(
-                                "No Results",
-                                systemImage: "location.slash",
-                                description: Text("Try a different address or place name.")
-                            )
-                            .listRowBackground(Color.clear)
-                        }
-                    } else {
-                        Section {
-                            ForEach(searcher.results, id: \.self) { completion in
+                            ForEach(store.recents) { recent in
                                 Button {
-                                    onSelect(.completion(completion))
-                                    dismiss()
+                                    select(recent.locationResult, label: recent.label, coordinate: recent.coordinate)
                                 } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(completion.title)
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "clock.arrow.circlepath")
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 20)
+                                        Text(recent.label)
                                             .foregroundStyle(.primary)
-                                        if !completion.subtitle.isEmpty {
-                                            Text(completion.subtitle)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                            .onDelete { offsets in
+                                store.remove(at: offsets)
+                            }
+                        } header: {
+                            Text("Recent")
+                        }
+                    }
+                } else if searcher.isSearching {
+                    Section {
+                        HStack { Spacer(); ProgressView(); Spacer() }
+                            .listRowBackground(Color.clear)
+                    }
+                } else if searcher.results.isEmpty {
+                    Section {
+                        ContentUnavailableView(
+                            "No Results",
+                            systemImage: "location.slash",
+                            description: Text("Try a different address or place name.")
+                        )
+                        .listRowBackground(Color.clear)
+                    }
+                } else {
+                    Section {
+                        ForEach(searcher.results, id: \.self) { completion in
+                            Button {
+                                let label = shortAddress(completion)
+                                // Select immediately; resolve coordinate for recents in background
+                                onSelect(.completion(completion))
+                                Task {
+                                    if let response = try? await MKLocalSearch(
+                                        request: .init(completion: completion)
+                                    ).start(),
+                                       let coord = response.mapItems.first?.placemark.coordinate {
+                                        store.add(label: label, coordinate: coord)
+                                    }
+                                }
+                                dismiss()
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(completion.title)
+                                        .foregroundStyle(.primary)
+                                    if !completion.subtitle.isEmpty {
+                                        Text(completion.subtitle)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
                             }
@@ -90,11 +126,19 @@ struct AddressSearchView: View {
                         let label = [placemark.name, placemark.locality, placemark.administrativeArea]
                             .compactMap { $0 }
                             .joined(separator: ", ")
-                        onSelect(.coordinate(loc.coordinate, label: label))
-                        dismiss()
+                        store.add(label: label, coordinate: loc.coordinate)
+                        select(.coordinate(loc.coordinate, label: label), label: label, coordinate: loc.coordinate)
                     }
                 }
             }
         }
+    }
+
+    // MARK: - Helpers
+
+    private func select(_ result: LocationResult, label: String, coordinate: CLLocationCoordinate2D) {
+        store.add(label: label, coordinate: coordinate)
+        onSelect(result)
+        dismiss()
     }
 }

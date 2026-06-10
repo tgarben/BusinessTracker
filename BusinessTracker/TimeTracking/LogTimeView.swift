@@ -144,6 +144,7 @@ struct LogTimeView: View {
             }
             .navigationTitle("Log Hours")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.immediately)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

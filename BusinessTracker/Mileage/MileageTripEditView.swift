@@ -130,6 +130,7 @@ struct MileageTripEditView: View {
             }
             .navigationTitle("Edit Trip")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.immediately)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

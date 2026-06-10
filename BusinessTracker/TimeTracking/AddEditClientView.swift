@@ -58,6 +58,7 @@ struct AddEditClientView: View {
             }
             .navigationTitle(isEditing ? "Edit Client" : "New Client")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.immediately)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

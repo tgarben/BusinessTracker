@@ -256,10 +256,15 @@ All four features will require a separate app extension target and careful thoug
 - `Text +` concatenation is deprecated in iOS 26 — use string interpolation instead
 - `Decimal(string:)` used for amount parsing from text fields — handles currency input safely. Strip any `$` prefix before passing if the field displays one.
 - `Color.tertiary` doesn't exist as a `Color` — use `.foregroundStyle(.tertiary)` or `AnyShapeStyle(.tertiary)` when mixing with `Color` in a ternary
-- `scrollDismissesKeyboard(.immediately)` added to Settings form — pattern to reuse on any form with number fields
+- `scrollDismissesKeyboard(.immediately)` must be added to every `Form` that contains text fields — applied to all sheets app-wide (Add/Edit Expense, Log/Edit Time, Log/Edit Trip, Presets, Add/Edit Client, Add/Edit Project, Settings)
 - `ToolbarSpacer(placement:)` is an iOS 26 API — use it to break Liquid Glass grouping between toolbar items in the same placement
 - Onboarding gated by `@AppStorage("hasCompletedOnboarding")` — set to `false` in UserDefaults to re-trigger for testing
 - `ITSAppUsesNonExemptEncryption = NO` is set in build settings (both Debug and Release) via `INFOPLIST_KEY_ITSAppUsesNonExemptEncryption` — no more TestFlight export compliance prompts
 - `MKLocalSearchCompletion` cannot be instantiated directly — address search uses `LocationResult` enum (`.completion` or `.coordinate`) to handle both MapKit results and current-location coordinates uniformly
 - `UIImage` conforms to `Identifiable` via a `@retroactive` extension in `AddExpenseView.swift` — needed for `.sheet(item:)` on the receipt preview. Do not add a second conformance elsewhere.
-- SwiftData supports adding new properties with default values as a lightweight migration — adding `receiptImagesData: [Data]` alongside the old `receiptImageData: Data?` required no manual migration schema
+- SwiftData lightweight migration requires default values on the **property declaration**, not just in `init` — e.g. `var receiptImagesData: [Data] = []`. Missing the `= []` causes the store to silently fail to open, breaking saves for all models.
+- `CLLocationManagerDelegate.locationManagerDidChangeAuthorization` fires immediately when the delegate is set in `init` — always guard on an explicit `isLocating` flag before calling `requestLocation()` to prevent auto-triggering on sheet open
+- `LabeledContent` splits a row roughly 50/50 — long label text gets truncated. For rows with icons + text labels, use `HStack { icon; Text; Spacer(); value }` with a fixed-width value field instead. Reserve `LabeledContent` for short labels (e.g. "Structure" picker) where the right side needs the extra space.
+- Currency prefix on amount fields: use `HStack { Text("Amount"); Spacer(); Text("$"); TextField(...).frame(width: 100) }` — putting `$` inside a `LabeledContent` content HStack pushes it to the center of the row rather than adjacent to the typed value.
+- `ContentUnavailableView` should always be placed in `.overlay` on the `List`, not inside a `Section` — overlay centers it on the full screen, Section just stacks it below existing content
+- `NavigationLink` label VStack in a List needs `.frame(maxWidth: .infinity, alignment: .leading)` to fill the row width — without it the row may render with content top-aligned instead of vertically centered

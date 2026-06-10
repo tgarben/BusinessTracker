@@ -85,6 +85,7 @@ struct TimeEntryEditView: View {
             }
             .navigationTitle("Edit Entry")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.immediately)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

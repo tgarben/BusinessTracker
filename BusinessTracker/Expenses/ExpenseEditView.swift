@@ -46,13 +46,14 @@ struct ExpenseEditView: View {
                 Section("Details") {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
 
-                    LabeledContent("Amount") {
-                        HStack(spacing: 2) {
-                            Text("$").foregroundStyle(.secondary)
-                            TextField("0.00", text: $amountText)
-                                .multilineTextAlignment(.trailing)
-                                .keyboardType(.decimalPad)
-                        }
+                    HStack {
+                        Text("Amount")
+                        Spacer()
+                        Text("$").foregroundStyle(.secondary)
+                        TextField("0.00", text: $amountText)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad)
+                            .frame(width: 100)
                     }
 
                     Picker("Category", selection: $category) {
@@ -125,6 +126,7 @@ struct ExpenseEditView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Edit Expense")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

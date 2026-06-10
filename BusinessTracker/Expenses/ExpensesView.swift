@@ -35,16 +35,7 @@ struct ExpensesView: View {
                     .listRowBackground(Color.clear)
                 }
 
-                if expenses.isEmpty {
-                    Section {
-                        ContentUnavailableView(
-                            "No Expenses",
-                            systemImage: "creditcard",
-                            description: Text("Tap + to log your first business expense.")
-                        )
-                        .listRowBackground(Color.clear)
-                    }
-                } else {
+                if !expenses.isEmpty {
                     let grouped = Dictionary(grouping: expenses) {
                         Calendar.current.startOfDay(for: $0.date)
                     }
@@ -65,6 +56,15 @@ struct ExpensesView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .overlay {
+                if expenses.isEmpty {
+                    ContentUnavailableView(
+                        "No Expenses",
+                        systemImage: "creditcard",
+                        description: Text("Tap + to log your first business expense.")
+                    )
+                }
+            }
             .navigationTitle("Expenses")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

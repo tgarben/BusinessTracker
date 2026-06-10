@@ -95,6 +95,10 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
+        // Only act if the user explicitly tapped "Use Current Location" —
+        // this delegate fires immediately on init (before any user action),
+        // so guard on isLocating to avoid auto-requesting on sheet open.
+        guard isLocating else { return }
         if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
             manager.requestLocation()
         } else if manager.authorizationStatus != .notDetermined {

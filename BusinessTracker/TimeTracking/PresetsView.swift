@@ -54,6 +54,7 @@ struct PresetsView: View {
             }
             .navigationTitle("Presets")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.immediately)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
@@ -225,6 +226,7 @@ struct AddEditPresetView: View {
             }
             .navigationTitle(isEditing ? "Edit Preset" : "New Preset")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.immediately)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

@@ -40,26 +40,24 @@ struct SettingsView: View {
 
                 // MARK: Rates & Defaults
                 Section {
-                    LabeledContent {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "car.fill", color: .blue)
+                        Text("IRS Mileage Rate")
+                        Spacer()
                         TextField("0.000", value: $mileageRate, format: .number.precision(.fractionLength(3)))
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
-                    } label: {
-                        HStack(spacing: 10) {
-                            SettingsIcon(symbol: "car.fill", color: .blue)
-                            Text("IRS Mileage Rate")
-                        }
+                            .frame(width: 72)
                     }
 
-                    LabeledContent {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "clock.fill", color: .indigo)
+                        Text("Default Hourly Rate")
+                        Spacer()
                         TextField("0.00", value: $defaultHourlyRate, format: .number.precision(.fractionLength(2)))
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
-                    } label: {
-                        HStack(spacing: 10) {
-                            SettingsIcon(symbol: "clock.fill", color: .indigo)
-                            Text("Default Hourly Rate")
-                        }
+                            .frame(width: 72)
                     }
                 } header: {
                     Text("Rates & Defaults")
@@ -69,26 +67,24 @@ struct SettingsView: View {
 
                 // MARK: Fuel
                 Section {
-                    LabeledContent {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "fuelpump.fill", color: .orange)
+                        Text("Vehicle MPG")
+                        Spacer()
                         TextField("30", value: $mpg, format: .number.precision(.fractionLength(0)))
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
-                    } label: {
-                        HStack(spacing: 10) {
-                            SettingsIcon(symbol: "fuelpump.fill", color: .orange)
-                            Text("Vehicle MPG")
-                        }
+                            .frame(width: 72)
                     }
 
-                    LabeledContent {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "dollarsign.circle.fill", color: .orange)
+                        Text("Gas Price / Gallon")
+                        Spacer()
                         TextField("3.80", value: $gasPrice, format: .number.precision(.fractionLength(2)))
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
-                    } label: {
-                        HStack(spacing: 10) {
-                            SettingsIcon(symbol: "dollarsign.circle.fill", color: .orange)
-                            Text("Gas Price / Gallon")
-                        }
+                            .frame(width: 72)
                     }
                 } header: {
                     Text("Fuel")
@@ -98,11 +94,11 @@ struct SettingsView: View {
 
                 // MARK: Tax Information
                 Section {
-                    // Business structure — full-width picker via LabeledContent
                     LabeledContent {
                         Picker("", selection: $businessStructure) {
                             ForEach(businessStructures, id: \.self) { Text($0) }
                         }
+                        .labelsHidden()
                     } label: {
                         HStack(spacing: 10) {
                             SettingsIcon(symbol: "building.columns.fill", color: .green)
@@ -110,34 +106,26 @@ struct SettingsView: View {
                         }
                     }
 
-                    LabeledContent {
-                        HStack(spacing: 4) {
-                            TextField("15.3", value: $selfEmploymentRate, format: .number.precision(.fractionLength(1)))
-                                .multilineTextAlignment(.trailing)
-                                .keyboardType(.decimalPad)
-                                .frame(width: 56)
-                            Text("%").foregroundStyle(.secondary)
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            SettingsIcon(symbol: "percent", color: .green)
-                            Text("SE Tax Rate")
-                        }
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "percent", color: .green)
+                        Text("SE Tax Rate")
+                        Spacer()
+                        TextField("15.3", value: $selfEmploymentRate, format: .number.precision(.fractionLength(1)))
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad)
+                            .frame(width: 52)
+                        Text("%").foregroundStyle(.secondary)
                     }
 
-                    LabeledContent {
-                        HStack(spacing: 4) {
-                            TextField("22", value: $incomeBracketRate, format: .number.precision(.fractionLength(1)))
-                                .multilineTextAlignment(.trailing)
-                                .keyboardType(.decimalPad)
-                                .frame(width: 56)
-                            Text("%").foregroundStyle(.secondary)
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            SettingsIcon(symbol: "chart.line.uptrend.xyaxis", color: .green)
-                            Text("Income Bracket")
-                        }
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "chart.line.uptrend.xyaxis", color: .green)
+                        Text("Income Bracket")
+                        Spacer()
+                        TextField("22", value: $incomeBracketRate, format: .number.precision(.fractionLength(1)))
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad)
+                            .frame(width: 52)
+                        Text("%").foregroundStyle(.secondary)
                     }
                 } header: {
                     Text("Tax Information")

@@ -9,7 +9,7 @@ final class Expense {
     var category: String
     var notes: String
     var receiptImageData: Data?      // legacy single-image field; kept for migration
-    var receiptImagesData: [Data]    // multi-image storage
+    var receiptImagesData: [Data] = []  // multi-image storage
     var client: Client?
 
     init(date: Date = .now, amount: Decimal, category: String, notes: String = "", client: Client? = nil) {

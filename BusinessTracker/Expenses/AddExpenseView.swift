@@ -28,13 +28,14 @@ struct AddExpenseView: View {
                 Section("Details") {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
 
-                    LabeledContent("Amount") {
-                        HStack(spacing: 2) {
-                            Text("$").foregroundStyle(.secondary)
-                            TextField("0.00", text: $amountText)
-                                .multilineTextAlignment(.trailing)
-                                .keyboardType(.decimalPad)
-                        }
+                    HStack {
+                        Text("Amount")
+                        Spacer()
+                        Text("$").foregroundStyle(.secondary)
+                        TextField("0.00", text: $amountText)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad)
+                            .frame(width: 100)
                     }
 
                     Picker("Category", selection: $category) {
@@ -109,6 +110,7 @@ struct AddExpenseView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Add Expense")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

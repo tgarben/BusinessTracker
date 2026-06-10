@@ -31,16 +31,7 @@ struct MileageView: View {
                     .listRowBackground(Color.clear)
                 }
 
-                if trips.isEmpty {
-                    Section {
-                        ContentUnavailableView(
-                            "No Trips Logged",
-                            systemImage: "car",
-                            description: Text("Tap + to log your first business trip.")
-                        )
-                        .listRowBackground(Color.clear)
-                    }
-                } else {
+                if !trips.isEmpty {
                     let grouped = Dictionary(grouping: trips) {
                         Calendar.current.startOfDay(for: $0.date)
                     }
@@ -61,6 +52,15 @@ struct MileageView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .overlay {
+                if trips.isEmpty {
+                    ContentUnavailableView(
+                        "No Trips Logged",
+                        systemImage: "car",
+                        description: Text("Tap + to log your first business trip.")
+                    )
+                }
+            }
             .navigationTitle("Mileage")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
