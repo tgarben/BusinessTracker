@@ -1,28 +1,148 @@
 import SwiftUI
+import SwiftData
 
-struct IncomeView: View {
-    @State private var showSettings = false
+// MARK: - Income row (used in ClientDetailView)
+
+struct IncomeRow: View {
+    let entry: IncomeEntry
 
     var body: some View {
-        NavigationStack {
-            PlaceholderView(
-                icon: "dollarsign.circle",
-                title: "Income & Tax",
-                description: "Record income, project earnings, and estimate your tax obligations."
-            )
-            .navigationTitle("Income")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center) {
+                Text(entry.source)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(entry.amount.formatted(.currency(code: "USD")))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.green.opacity(0.1), in: Capsule())
+            }
+
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .frame(width: 12)
+                Text(entry.date, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !entry.notes.isEmpty {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(entry.notes)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
                 }
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
         }
+        .padding(.vertical, 4)
     }
 }
 
-#Preview { IncomeView() }
+// MARK: - Income edit sheet (used in ClientDetailView)
+
+struct IncomeEditView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Client.name) private var clients: [Client]
+
+    let entry: IncomeEntry
+
+    @State private var date: Date = .now
+    @State private var source: String = ""
+    @State private var amountText: String = ""
+    @State private var selectedClient: Client?
+    @State private var notes: String = ""
+
+    private let sourcePresets = [
+        "Invoice Payment", "Retainer", "Project Fee", "Consulting", "Other"
+    ]
+
+    private var canSave: Bool {
+        !source.trimmingCharacters(in: .whitespaces).isEmpty &&
+        (Decimal(string: amountText) ?? 0) > 0
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Details") {
+                    DatePicker("Date", selection: $date, displayedComponents: .date)
+
+                    HStack {
+                        Text("Amount")
+                        Spacer()
+                        Text("$").foregroundStyle(.secondary)
+                        TextField("0.00", text: $amountText)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad)
+                            .frame(width: 100)
+                    }
+                }
+
+                Section {
+                    TextField("e.g. Invoice Payment", text: $source)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(sourcePresets, id: \.self) { preset in
+                                Button(preset) { source = preset }
+                                    .buttonStyle(.bordered)
+                                    .tint(source == preset ? .green : .secondary)
+                                    .font(.caption)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                } header: {
+                    Text("Source")
+                }
+
+                Section("Client") {
+                    Picker("Client", selection: $selectedClient) {
+                        Text("None").tag(Optional<Client>.none)
+                        ForEach(clients) { client in
+                            Text(client.name).tag(Optional(client))
+                        }
+                    }
+                }
+
+                Section("Notes") {
+                    TextField("Optional notes", text: $notes, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+            }
+            .scrollDismissesKeyboard(.immediately)
+            .navigationTitle("Edit Income")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(!canSave)
+                }
+            }
+        }
+        .onAppear { load() }
+    }
+
+    private func load() {
+        date = entry.date
+        source = entry.source
+        amountText = entry.amount.formatted(.number)
+        selectedClient = entry.client
+        notes = entry.notes
+    }
+
+    private func save() {
+        entry.date = date
+        entry.source = source.trimmingCharacters(in: .whitespaces)
+        entry.amount = Decimal(string: amountText) ?? 0
+        entry.client = selectedClient
+        entry.notes = notes
+        dismiss()
+    }
+}

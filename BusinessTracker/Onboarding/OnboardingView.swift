@@ -10,12 +10,14 @@ struct OnboardingView: View {
         TabView(selection: $currentPage) {
             WelcomePage(onNext: { currentPage = 1 })
                 .tag(0)
-            LocationPage(onNext: { currentPage = 2 })
+            AboutYouPage(onNext: { currentPage = 2 })
                 .tag(1)
-            NotificationsPage(onNext: { currentPage = 3 })
+            LocationPage(onNext: { currentPage = 3 })
                 .tag(2)
-            ReadyPage(onDone: { hasCompletedOnboarding = true })
+            NotificationsPage(onNext: { currentPage = 4 })
                 .tag(3)
+            ReadyPage(onDone: { hasCompletedOnboarding = true })
+                .tag(4)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .ignoresSafeArea()
@@ -37,6 +39,131 @@ private struct WelcomePage: View {
             buttonLabel: "Get Started",
             onNext: onNext
         )
+    }
+}
+
+// MARK: - About You
+
+private struct AboutYouPage: View {
+    let onNext: () -> Void
+
+    @AppStorage("user_name") private var storedName: String = ""
+    @AppStorage("home_sectionOrder") private var sectionOrder: String = HomeSection.defaultOrderString
+    @AppStorage("user_primaryUse") private var primaryUse: String = "Mixed"
+
+    @State private var name: String = ""
+    @State private var selectedUse: String = "Mixed"
+
+    private let useOptions: [(label: String, icon: String, color: Color)] = [
+        ("Time & Billing", "clock.fill", .indigo),
+        ("Mileage",        "car.fill",   .blue),
+        ("Expenses",       "creditcard.fill", .red),
+        ("Mixed",          "square.grid.2x2.fill", .purple),
+    ]
+
+    var body: some View {
+        ZStack {
+            Color(.systemGroupedBackground).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                Image(systemName: "person.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.indigo)
+                    .padding(.bottom, 32)
+
+                VStack(spacing: 8) {
+                    Text("Let's personalize\nyour experience")
+                        .font(.largeTitle.bold())
+                        .multilineTextAlignment(.center)
+                    Text("You can change these anytime in Settings.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 32)
+
+                Spacer()
+
+                VStack(spacing: 20) {
+                    // Name field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("What should we call you?")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 4)
+                        TextField("First name", text: $name)
+                            .font(.body)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    // Use case picker
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("What do you primarily track?")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 4)
+
+                        VStack(spacing: 0) {
+                            ForEach(useOptions, id: \.label) { option in
+                                Button {
+                                    selectedUse = option.label
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: option.icon)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(option.color)
+                                            .frame(width: 22)
+                                        Text(option.label)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        if selectedUse == option.label {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 13, weight: .semibold))
+                                                .foregroundStyle(.indigo)
+                                        }
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                }
+
+                                if option.label != useOptions.last?.label {
+                                    Divider().padding(.leading, 50)
+                                }
+                            }
+                        }
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+                .padding(.horizontal, 32)
+
+                Spacer()
+
+                Button(action: save) {
+                    Text("Continue")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.indigo, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(.horizontal, 32)
+                .padding(.bottom, 52)
+            }
+        }
+        .onAppear {
+            name = storedName
+            selectedUse = primaryUse
+        }
+    }
+
+    private func save() {
+        storedName = name.trimmingCharacters(in: .whitespaces)
+        primaryUse = selectedUse
+        sectionOrder = HomeSection.orderString(forUse: selectedUse)
+        onNext()
     }
 }
 

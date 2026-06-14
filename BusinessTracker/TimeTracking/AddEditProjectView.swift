@@ -25,11 +25,11 @@ struct AddEditProjectView: View {
                             .keyboardType(.decimalPad)
                     }
                 }
-                if let client {
-                    Section {
-                        LabeledContent("Client", value: client.name)
-                    }
-                }
+//                if let client {
+//                    Section {
+//                        LabeledContent("Client", value: client.name)
+//                    }
+//                }
             }
             .navigationTitle(isEditing ? "Edit Project" : "New Project")
             .navigationBarTitleDisplayMode(.inline)

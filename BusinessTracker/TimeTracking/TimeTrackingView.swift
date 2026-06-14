@@ -10,6 +10,7 @@ struct TimeTrackingView: View {
     @State private var showPresets = false
     @State private var showSettings = false
     @State private var entryToEdit: TimeEntry?
+    @State private var pendingDelete: ([TimeEntry], IndexSet)?
 
     // Week summary
     private var weekEntries: [TimeEntry] {
@@ -24,10 +25,12 @@ struct TimeTrackingView: View {
         NavigationStack {
             List {
                 // Week summary card
-                Section {
-                    WeekSummaryCard(hours: weekHours, earnings: weekEarnings)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
+                if !entries.isEmpty {
+                    Section {
+                        WeekSummaryCard(hours: weekHours, earnings: weekEarnings)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                    }
                 }
 
                 // Active timer card (only when running)
@@ -55,7 +58,7 @@ struct TimeTrackingView: View {
                                     .onTapGesture { entryToEdit = entry }
                             }
                             .onDelete { indexSet in
-                                deleteEntries(from: grouped[day] ?? [], at: indexSet)
+                                pendingDelete = (grouped[day] ?? [], indexSet)
                             }
                         }
                     }
@@ -112,15 +115,27 @@ struct TimeTrackingView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
+            .confirmationDialog("Delete Time Entry?", isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ), titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    if let (items, offsets) = pendingDelete {
+                        for index in offsets { modelContext.delete(items[index]) }
+                    }
+                    pendingDelete = nil
+                }
+                Button("Cancel", role: .cancel) { pendingDelete = nil }
+            } message: {
+                Text("This cannot be undone.")
+            }
         }
     }
 
     @Environment(\.modelContext) private var modelContext
 
     private func deleteEntries(from entries: [TimeEntry], at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(entries[index])
-        }
+        for index in offsets { modelContext.delete(entries[index]) }
     }
 }
 

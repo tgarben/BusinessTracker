@@ -2,6 +2,10 @@ import SwiftUI
 import SwiftData
 
 struct SettingsView: View {
+    @AppStorage("user_name") private var userName: String = ""
+    @AppStorage("user_primaryUse") private var primaryUse: String = "Mixed"
+    @AppStorage("home_sectionOrder") private var sectionOrder: String = HomeSection.defaultOrderString
+
     @AppStorage("mileage_ratePerMile") private var mileageRate: Double = MileageTrip.defaultRatePerMile
     @AppStorage("default_hourlyRate") private var defaultHourlyRate: Double = 0
     @AppStorage("report_mpg") private var mpg: Double = 30.0
@@ -10,11 +14,12 @@ struct SettingsView: View {
     @AppStorage("tax_incomeBracketRate") private var incomeBracketRate: Double = 22.0
     @AppStorage("tax_businessStructure") private var businessStructure: String = "Sole Proprietor"
 
+    private let primaryUseOptions = ["Mixed", "Time & Billing", "Mileage", "Expenses"]
+
     @Query(sort: \TimeEntry.date, order: .reverse) private var timeEntries: [TimeEntry]
     @Query(sort: \MileageTrip.date, order: .reverse) private var trips: [MileageTrip]
     @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
 
-    @State private var showClients = false
     @State private var exportItem: ExportItem?
 
     private let businessStructures = [
@@ -26,21 +31,36 @@ struct SettingsView: View {
         NavigationStack {
             List {
 
-                // MARK: Business
-                Section("Business") {
-                    Button {
-                        showClients = true
+                // MARK: Personalization
+                Section {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "person.fill", color: .indigo)
+                        Text("Your Name")
+                        Spacer()
+                        TextField("First name", text: $userName)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 120)
+                    }
+
+                    LabeledContent {
+                        Picker("", selection: $primaryUse) {
+                            ForEach(primaryUseOptions, id: \.self) { Text($0) }
+                        }
+                        .labelsHidden()
+                        .onChange(of: primaryUse) { _, newValue in
+                            sectionOrder = HomeSection.orderString(forUse: newValue)
+                        }
                     } label: {
-                        HStack {
-                            SettingsIcon(symbol: "person.2.fill", color: .indigo)
-                            Text("Clients & Projects")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
+                        HStack(spacing: 10) {
+                            SettingsIcon(symbol: "square.grid.2x2.fill", color: .purple)
+                            Text("Primary Use")
                         }
                     }
+                } header: {
+                    Text("Personalization")
+                } footer: {
+                    Text("Your name appears in the Home screen greeting. Changing your primary use resets the Home screen section order.")
                 }
 
                 // MARK: Rates & Defaults
@@ -209,9 +229,6 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Settings")
-            .sheet(isPresented: $showClients) {
-                ClientListView()
-            }
             .sheet(item: $exportItem) { item in
                 ShareSheet(activityItems: [item.url])
                     .ignoresSafeArea()

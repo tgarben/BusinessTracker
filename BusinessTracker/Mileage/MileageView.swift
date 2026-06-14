@@ -9,6 +9,7 @@ struct MileageView: View {
     @State private var showHistory = false
     @State private var showSettings = false
     @State private var editingTrip: MileageTrip?
+    @State private var pendingDelete: ([MileageTrip], IndexSet)?
 
     private var monthTrips: [MileageTrip] {
         let start = Calendar.current.startOfMonth(for: .now)
@@ -21,14 +22,16 @@ struct MileageView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    MileageSummaryCard(
-                        miles: monthMiles,
-                        reimbursement: monthReimbursement,
-                        label: "\(Date.now.formatted(.dateTime.month(.wide))) Miles"
-                    )
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+                if !trips.isEmpty {
+                    Section {
+                        MileageSummaryCard(
+                            miles: monthMiles,
+                            reimbursement: monthReimbursement,
+                            label: "\(Date.now.formatted(.dateTime.month(.wide))) Miles"
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
                 }
 
                 if !trips.isEmpty {
@@ -45,7 +48,7 @@ struct MileageView: View {
                                     .onTapGesture { editingTrip = trip }
                             }
                             .onDelete { offsets in
-                                deleteTrips(from: grouped[day] ?? [], at: offsets)
+                                pendingDelete = (grouped[day] ?? [], offsets)
                             }
                         }
                     }
@@ -90,6 +93,20 @@ struct MileageView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .confirmationDialog("Delete Trip?", isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ), titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    if let (items, offsets) = pendingDelete {
+                        for index in offsets { modelContext.delete(items[index]) }
+                    }
+                    pendingDelete = nil
+                }
+                Button("Cancel", role: .cancel) { pendingDelete = nil }
+            } message: {
+                Text("This cannot be undone.")
             }
         }
     }

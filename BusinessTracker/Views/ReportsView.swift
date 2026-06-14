@@ -4,12 +4,15 @@ import SwiftData
 struct ReportsView: View {
     @Query private var timeEntries: [TimeEntry]
     @Query private var trips: [MileageTrip]
+    @Query private var expenses: [Expense]
+    @Query private var incomeEntries: [IncomeEntry]
 
     @AppStorage("report_mpg") private var mpg: Double = 30.0
     @AppStorage("report_gasPrice") private var gasPrice: Double = 3.80
+    @AppStorage("tax_selfEmploymentRate") private var seRate: Double = 15.3
+    @AppStorage("tax_incomeBracketRate") private var bracketRate: Double = 22.0
 
     @State private var showFuelSettings = false
-    @State private var showSettings = false
 
     // MARK: - Current month window
 
@@ -23,22 +26,29 @@ struct ReportsView: View {
 
     // MARK: - Month aggregates
 
-    private var monthEntries: [TimeEntry] {
-        timeEntries.filter { $0.date >= monthStart }
-    }
+    private var monthEntries: [TimeEntry]     { timeEntries.filter { $0.date >= monthStart } }
+    private var monthTrips: [MileageTrip]     { trips.filter { $0.date >= monthStart } }
+    private var monthExpenses: [Expense]      { expenses.filter { $0.date >= monthStart } }
+    private var monthIncome: [IncomeEntry]    { incomeEntries.filter { $0.date >= monthStart } }
 
-    private var monthTrips: [MileageTrip] {
-        trips.filter { $0.date >= monthStart }
-    }
+    private var totalHours: Double            { monthEntries.reduce(0) { $0 + $1.hours } }
+    private var totalEarnings: Decimal        { monthEntries.reduce(0) { $0 + $1.earnings } }
+    private var totalMiles: Double            { monthTrips.reduce(0) { $0 + $1.miles } }
+    private var totalReimbursement: Double    { monthTrips.reduce(0) { $0 + $1.reimbursementAmount } }
+    private var totalExpenses: Decimal        { monthExpenses.reduce(0) { $0 + $1.amount } }
+    private var totalIncome: Decimal          { monthIncome.reduce(0) { $0 + $1.amount } }
 
-    private var totalHours: Double        { monthEntries.reduce(0) { $0 + $1.hours } }
-    private var totalEarnings: Decimal    { monthEntries.reduce(0) { $0 + $1.earnings } }
-    private var totalMiles: Double        { monthTrips.reduce(0) { $0 + $1.miles } }
-    private var totalReimbursement: Double { monthTrips.reduce(0) { $0 + $1.reimbursementAmount } }
+    private var estimatedGallons: Double      { mpg > 0 ? totalMiles / mpg : 0 }
+    private var estimatedFuelCost: Double     { estimatedGallons * gasPrice }
+    private var netMileage: Double            { totalReimbursement - estimatedFuelCost }
 
-    private var estimatedGallons: Double  { mpg > 0 ? totalMiles / mpg : 0 }
-    private var estimatedFuelCost: Double { estimatedGallons * gasPrice }
-    private var netMileage: Double        { totalReimbursement - estimatedFuelCost }
+    // MARK: - Tax estimates
+
+    private var seAmount: Decimal            { totalIncome * Decimal(seRate / 100) }
+    private var incomeTaxAmount: Decimal     { totalIncome * Decimal(bracketRate / 100) }
+    private var totalSetAside: Decimal       { seAmount + incomeTaxAmount }
+
+    // MARK: - Top clients
 
     private var topClients: [(name: String, hours: Double, earnings: Decimal)] {
         var map: [String: (hours: Double, earnings: Decimal)] = [:]
@@ -53,7 +63,7 @@ struct ReportsView: View {
     }
 
     private var hasData: Bool {
-        !monthEntries.isEmpty || !monthTrips.isEmpty
+        !monthEntries.isEmpty || !monthTrips.isEmpty || !monthExpenses.isEmpty || !monthIncome.isEmpty
     }
 
     var body: some View {
@@ -83,6 +93,15 @@ struct ReportsView: View {
                         }
                     }
 
+                    // MARK: Tax set-aside
+                    if totalIncome > 0 {
+                        Section("Tax Set-Aside Estimate") {
+                            taxCard
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                        }
+                    }
+
                     // MARK: Top clients
                     if !topClients.isEmpty {
                         Section("Top Clients — \(monthLabel)") {
@@ -104,61 +123,43 @@ struct ReportsView: View {
                     ContentUnavailableView(
                         "No Data Yet",
                         systemImage: "chart.bar",
-                        description: Text("Log time or trips to see your monthly report.")
+                        description: Text("Log time, trips, expenses, or income to see your monthly report.")
                     )
                 }
             }
             .navigationTitle("Reports")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                    }
-                }
-            }
             .sheet(isPresented: $showFuelSettings) {
                 FuelSettingsSheet(mpg: $mpg, gasPrice: $gasPrice)
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
             }
         }
     }
 
-    // MARK: - Glance card
+    // MARK: - Glance card (3×2 grid)
 
     private var glanceCard: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                glanceItem(
-                    value: String(format: "%.1f", totalHours),
-                    unit: "hrs",
-                    label: "Hours",
-                    color: .indigo
-                )
+                glanceItem(value: String(format: "%.1f", totalHours), unit: "hrs",
+                           label: "Hours", color: .indigo)
                 Divider().frame(height: 44)
-                glanceItem(
-                    value: totalEarnings.formatted(.currency(code: "USD")),
-                    unit: nil,
-                    label: "Earned",
-                    color: .indigo
-                )
+                glanceItem(value: totalEarnings.formatted(.currency(code: "USD")), unit: nil,
+                           label: "Earned", color: .indigo)
             }
             Divider()
             HStack(spacing: 0) {
-                glanceItem(
-                    value: String(format: "%.1f", totalMiles),
-                    unit: "mi",
-                    label: "Miles",
-                    color: .blue
-                )
+                glanceItem(value: String(format: "%.1f", totalMiles), unit: "mi",
+                           label: "Miles", color: .blue)
                 Divider().frame(height: 44)
-                glanceItem(
-                    value: totalReimbursement.formatted(.currency(code: "USD")),
-                    unit: nil,
-                    label: "Reimbursement",
-                    color: .blue
-                )
+                glanceItem(value: totalReimbursement.formatted(.currency(code: "USD")), unit: nil,
+                           label: "Reimbursement", color: .blue)
+            }
+            Divider()
+            HStack(spacing: 0) {
+                glanceItem(value: totalIncome.formatted(.currency(code: "USD")), unit: nil,
+                           label: "Income", color: .green)
+                Divider().frame(height: 44)
+                glanceItem(value: totalExpenses.formatted(.currency(code: "USD")), unit: nil,
+                           label: "Expenses", color: .red)
             }
         }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -180,11 +181,59 @@ struct ReportsView: View {
         .padding(.vertical, 18)
     }
 
+    // MARK: - Tax card
+
+    private var taxCard: some View {
+        VStack(spacing: 0) {
+            taxRow(label: "Income This Month", value: totalIncome.formatted(.currency(code: "USD")), color: .green)
+            Divider().padding(.horizontal, 16)
+            taxRow(label: "Self-Employment Tax (\(seRate.formatted(.number.precision(.fractionLength(1))))%)",
+                   value: seAmount.formatted(.currency(code: "USD")), color: .primary)
+            taxRow(label: "Income Tax (\(bracketRate.formatted(.number.precision(.fractionLength(1))))%)",
+                   value: incomeTaxAmount.formatted(.currency(code: "USD")), color: .primary)
+            Divider().padding(.horizontal, 16)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Recommended Set-Aside")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Based on income entries · rates editable in Settings")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Text(totalSetAside.formatted(.currency(code: "USD")))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(.orange.opacity(0.12), in: Capsule())
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+    }
+
+    private func taxRow(label: String, value: String, color: Color) -> some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+    }
+
     // MARK: - Fuel card
 
     private var fuelCard: some View {
         VStack(spacing: 0) {
-            // Input stats row
             HStack(spacing: 0) {
                 fuelInputChip(value: String(format: "%.0f", mpg), label: "MPG", icon: "fuelpump.fill")
                 fuelDivider()
@@ -196,7 +245,6 @@ struct ReportsView: View {
 
             Divider().padding(.horizontal, 16)
 
-            // Breakdown rows
             VStack(spacing: 0) {
                 fuelBreakdownRow(label: "IRS Reimbursement", value: totalReimbursement.formatted(.currency(code: "USD")), color: .primary)
                 fuelBreakdownRow(label: "Estimated Fuel Cost", value: "−\(estimatedFuelCost.formatted(.currency(code: "USD")))", color: .red)
@@ -205,7 +253,6 @@ struct ReportsView: View {
 
             Divider().padding(.horizontal, 16)
 
-            // Net result row
             HStack {
                 Text("Net Profit")
                     .font(.subheadline.weight(.semibold))
@@ -348,5 +395,8 @@ private struct FuelSettingsSheet: View {
 
 #Preview {
     ReportsView()
-        .modelContainer(for: [TimeEntry.self, MileageTrip.self, Client.self, Project.self], inMemory: true)
+        .modelContainer(for: [
+            TimeEntry.self, MileageTrip.self, Client.self, Project.self,
+            Expense.self, IncomeEntry.self
+        ], inMemory: true)
 }

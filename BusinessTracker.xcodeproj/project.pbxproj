@@ -6,14 +6,76 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1E530AF32FDA515A0066D4D6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E530AF22FDA515A0066D4D6 /* WidgetKit.framework */; };
+		1E530AF52FDA515A0066D4D6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E530AF42FDA515A0066D4D6 /* SwiftUI.framework */; };
+		1E530B042FDA515B0066D4D6 /* FreelancedWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1E530AF02FDA515A0066D4D6 /* FreelancedWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1E530B022FDA515B0066D4D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1E164BB82FD4E77A0072457A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1E530AEF2FDA515A0066D4D6;
+			remoteInfo = FreelancedWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		1E530B092FDA515B0066D4D6 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				1E530B042FDA515B0066D4D6 /* FreelancedWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		1E164BC02FD4E77A0072457A /* BusinessTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BusinessTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E530AF02FDA515A0066D4D6 /* FreelancedWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FreelancedWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E530AF22FDA515A0066D4D6 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		1E530AF42FDA515A0066D4D6 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		1E530B0A2FDA51BE0066D4D6 /* FreelancedWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FreelancedWidgetExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1E530B052FDA515B0066D4D6 /* Exceptions for "FreelancedWidget" folder in "FreelancedWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1E530AEF2FDA515A0066D4D6 /* FreelancedWidgetExtension */;
+		};
+		1E530B0C2FDA51E70066D4D6 /* Exceptions for "BusinessTracker" folder in "BusinessTracker" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1E164BBF2FD4E77A0072457A /* BusinessTracker */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1E164BC22FD4E77A0072457A /* BusinessTracker */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1E530B0C2FDA51E70066D4D6 /* Exceptions for "BusinessTracker" folder in "BusinessTracker" target */,
+			);
 			path = BusinessTracker;
+			sourceTree = "<group>";
+		};
+		1E530AF62FDA515A0066D4D6 /* FreelancedWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1E530B052FDA515B0066D4D6 /* Exceptions for "FreelancedWidget" folder in "FreelancedWidgetExtension" target */,
+			);
+			path = FreelancedWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,13 +88,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1E530AED2FDA515A0066D4D6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1E530AF52FDA515A0066D4D6 /* SwiftUI.framework in Frameworks */,
+				1E530AF32FDA515A0066D4D6 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		1E164BB72FD4E77A0072457A = {
 			isa = PBXGroup;
 			children = (
+				1E530B0A2FDA51BE0066D4D6 /* FreelancedWidgetExtension.entitlements */,
 				1E164BC22FD4E77A0072457A /* BusinessTracker */,
+				1E530AF62FDA515A0066D4D6 /* FreelancedWidget */,
+				1E530AF12FDA515A0066D4D6 /* Frameworks */,
 				1E164BC12FD4E77A0072457A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +115,18 @@
 			isa = PBXGroup;
 			children = (
 				1E164BC02FD4E77A0072457A /* BusinessTracker.app */,
+				1E530AF02FDA515A0066D4D6 /* FreelancedWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		1E530AF12FDA515A0066D4D6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1E530AF22FDA515A0066D4D6 /* WidgetKit.framework */,
+				1E530AF42FDA515A0066D4D6 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,10 +139,12 @@
 				1E164BBC2FD4E77A0072457A /* Sources */,
 				1E164BBD2FD4E77A0072457A /* Frameworks */,
 				1E164BBE2FD4E77A0072457A /* Resources */,
+				1E530B092FDA515B0066D4D6 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				1E530B032FDA515B0066D4D6 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				1E164BC22FD4E77A0072457A /* BusinessTracker */,
@@ -69,6 +155,28 @@
 			productName = BusinessTracker;
 			productReference = 1E164BC02FD4E77A0072457A /* BusinessTracker.app */;
 			productType = "com.apple.product-type.application";
+		};
+		1E530AEF2FDA515A0066D4D6 /* FreelancedWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E530B062FDA515B0066D4D6 /* Build configuration list for PBXNativeTarget "FreelancedWidgetExtension" */;
+			buildPhases = (
+				1E530AEC2FDA515A0066D4D6 /* Sources */,
+				1E530AED2FDA515A0066D4D6 /* Frameworks */,
+				1E530AEE2FDA515A0066D4D6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1E530AF62FDA515A0066D4D6 /* FreelancedWidget */,
+			);
+			name = FreelancedWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = FreelancedWidgetExtension;
+			productReference = 1E530AF02FDA515A0066D4D6 /* FreelancedWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +189,9 @@
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					1E164BBF2FD4E77A0072457A = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					1E530AEF2FDA515A0066D4D6 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
@@ -100,12 +211,20 @@
 			projectRoot = "";
 			targets = (
 				1E164BBF2FD4E77A0072457A /* BusinessTracker */,
+				1E530AEF2FDA515A0066D4D6 /* FreelancedWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		1E164BBE2FD4E77A0072457A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E530AEE2FDA515A0066D4D6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +241,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1E530AEC2FDA515A0066D4D6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1E530B032FDA515B0066D4D6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1E530AEF2FDA515A0066D4D6 /* FreelancedWidgetExtension */;
+			targetProxy = 1E530B022FDA515B0066D4D6 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1E164BC92FD4E77B0072457A /* Debug */ = {
@@ -246,14 +380,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BusinessTracker/BusinessTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 9YFAU9R732;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BusinessTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Freelance Tracker";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -297,14 +433,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BusinessTracker/BusinessTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 9YFAU9R732;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BusinessTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Freelance Tracker";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -343,6 +481,81 @@
 			};
 			name = Release;
 		};
+		1E530B072FDA515B0066D4D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = FreelancedWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 9YFAU9R732;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FreelancedWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FreelancedWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.garbenTechnologies.BusinessTracker.FreelancedWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1E530B082FDA515B0066D4D6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = FreelancedWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 9YFAU9R732;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FreelancedWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FreelancedWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.garbenTechnologies.BusinessTracker.FreelancedWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -360,6 +573,15 @@
 			buildConfigurations = (
 				1E164BCC2FD4E77B0072457A /* Debug */,
 				1E164BCD2FD4E77B0072457A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1E530B062FDA515B0066D4D6 /* Build configuration list for PBXNativeTarget "FreelancedWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E530B072FDA515B0066D4D6 /* Debug */,
+				1E530B082FDA515B0066D4D6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

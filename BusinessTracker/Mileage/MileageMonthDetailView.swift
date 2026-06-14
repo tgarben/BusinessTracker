@@ -31,6 +31,7 @@ struct MileageMonthDetailView: View {
     }
 
     @State private var editingTrip: MileageTrip?
+    @State private var pendingDelete: ([MileageTrip], IndexSet)?
 
     var body: some View {
         List {
@@ -59,7 +60,7 @@ struct MileageMonthDetailView: View {
                             .onTapGesture { editingTrip = trip }
                     }
                     .onDelete { offsets in
-                        deleteTrips(from: grouped[day] ?? [], at: offsets)
+                        pendingDelete = (grouped[day] ?? [], offsets)
                     }
                 }
             }
@@ -69,6 +70,20 @@ struct MileageMonthDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editingTrip) { trip in
             MileageTripEditView(trip: trip)
+        }
+        .confirmationDialog("Delete Trip?", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let (items, offsets) = pendingDelete {
+                    for index in offsets { modelContext.delete(items[index]) }
+                }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("This cannot be undone.")
         }
     }
 

@@ -3,6 +3,10 @@ import Observation
 
 private let kTimerStartKey = "timerStartDate"
 
+enum WidgetAction {
+    case startTimer, logTime, logTrip, addExpense
+}
+
 /// Shared observable object that tracks whether a timer is currently running.
 /// Persisted to UserDefaults so the timer survives backgrounding.
 @Observable
@@ -10,6 +14,7 @@ final class TimerState {
     var startDate: Date?
     var client: Client?
     var project: Project?
+    var pendingWidgetAction: WidgetAction?
 
     var isRunning: Bool { startDate != nil }
 

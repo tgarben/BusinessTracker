@@ -9,6 +9,7 @@ struct ExpensesView: View {
     @State private var showHistory = false
     @State private var showSettings = false
     @State private var editingExpense: Expense?
+    @State private var pendingDelete: ([Expense], IndexSet)?
 
     private var monthStart: Date {
         Calendar.current.startOfMonth(for: .now)
@@ -25,14 +26,16 @@ struct ExpensesView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    ExpenseSummaryCard(
-                        total: monthTotal,
-                        count: monthExpenses.count,
-                        label: "\(Date.now.formatted(.dateTime.month(.wide))) Expenses"
-                    )
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+                if !expenses.isEmpty {
+                    Section {
+                        ExpenseSummaryCard(
+                            total: monthTotal,
+                            count: monthExpenses.count,
+                            label: "\(Date.now.formatted(.dateTime.month(.wide))) Expenses"
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
                 }
 
                 if !expenses.isEmpty {
@@ -49,7 +52,7 @@ struct ExpensesView: View {
                                     .onTapGesture { editingExpense = expense }
                             }
                             .onDelete { offsets in
-                                deleteExpenses(from: grouped[day] ?? [], at: offsets)
+                                pendingDelete = (grouped[day] ?? [], offsets)
                             }
                         }
                     }
@@ -95,6 +98,20 @@ struct ExpensesView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .confirmationDialog("Delete Expense?", isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ), titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    if let (items, offsets) = pendingDelete {
+                        for index in offsets { modelContext.delete(items[index]) }
+                    }
+                    pendingDelete = nil
+                }
+                Button("Cancel", role: .cancel) { pendingDelete = nil }
+            } message: {
+                Text("This cannot be undone.")
             }
         }
     }
