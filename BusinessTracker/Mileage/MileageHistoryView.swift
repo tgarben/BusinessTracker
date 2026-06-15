@@ -3,7 +3,7 @@ import SwiftData
 
 struct MileageHistoryView: View {
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \MileageTrip.date, order: .reverse) private var allTrips: [MileageTrip]
+    @Query(filter: #Predicate<MileageTrip> { $0.deletedDate == nil }, sort: \MileageTrip.date, order: .reverse) private var allTrips: [MileageTrip]
 
     private var months: [Date] {
         let cal = Calendar.current

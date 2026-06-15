@@ -2,17 +2,18 @@ import Foundation
 import SwiftData
 
 @Model
-final class Expense {
-    var id: UUID
-    var date: Date
-    var amount: Decimal
-    var category: String
-    var notes: String
-    var receiptImageData: Data?      // legacy single-image field; kept for migration
-    var receiptImagesData: [Data] = []  // multi-image storage
+final class Expense: SoftDeletable {
+    var id: UUID = UUID()
+    var date: Date = Date.now
+    var amount: Double = 0
+    var category: String = ""
+    var notes: String = ""
+    var receiptImageData: Data? = nil     // legacy single-image field; kept for migration
+    var receiptImagesData: [Data] = []   // multi-image storage
     var client: Client?
+    var deletedDate: Date? = nil
 
-    init(date: Date = .now, amount: Decimal, category: String, notes: String = "", client: Client? = nil) {
+    init(date: Date = .now, amount: Double, category: String, notes: String = "", client: Client? = nil) {
         self.id = UUID()
         self.date = date
         self.amount = amount

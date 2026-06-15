@@ -26,6 +26,8 @@ struct MileageTripEditView: View {
     @State private var toResult: LocationResult?
     @State private var fromLabel: String = ""
     @State private var toLabel: String = ""
+    @State private var fromAddress: String = ""
+    @State private var toAddress: String = ""
     @State private var calculatedMiles: Double?
     @State private var isCalculating = false
     @State private var calculationError: String?
@@ -77,6 +79,7 @@ struct MileageTripEditView: View {
                 Section("Trip Details") {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                     TextField("Purpose", text: $purpose)
+                    PurposeChipsRow(purpose: $purpose)
                 }
 
                 Section("Route") {
@@ -144,6 +147,7 @@ struct MileageTripEditView: View {
                 AddressSearchView(title: "From") { result in
                     fromResult = result
                     fromLabel = labelFor(result)
+                    fromAddress = fullAddressFor(result)
                     calculatedMiles = nil
                 }
             }
@@ -151,6 +155,7 @@ struct MileageTripEditView: View {
                 AddressSearchView(title: "To") { result in
                     toResult = result
                     toLabel = labelFor(result)
+                    toAddress = fullAddressFor(result)
                     calculatedMiles = nil
                 }
             }
@@ -232,6 +237,13 @@ struct MileageTripEditView: View {
         }
     }
 
+    private func fullAddressFor(_ result: LocationResult) -> String {
+        switch result {
+        case .completion(let c): return fullAddress(c)
+        case .coordinate(_, let label): return label
+        }
+    }
+
     private func calculateMiles() async {
         guard let from = fromResult, let to = toResult else { return }
         isCalculating = true
@@ -249,6 +261,12 @@ struct MileageTripEditView: View {
         trip.purpose = purpose.isEmpty ? "Business trip" : purpose
         trip.startLocation = resolvedStart
         trip.endLocation = resolvedEnd
+        // Only refresh export addresses when re-picked in address mode (preserves
+        // a previously-captured full address when just editing other fields).
+        if editMode == .address {
+            trip.startAddress = fromAddress
+            trip.endAddress = toAddress
+        }
         trip.miles = editMode == .address ? totalMiles : manualMiles
         trip.notes = notes
         dismiss()

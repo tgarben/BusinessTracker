@@ -9,21 +9,21 @@ struct ExpenseMonthDetailView: View {
         Calendar.current.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
     }
 
-    @Query private var expenses: [Expense]
+    @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }) private var expenses: [Expense]
 
     init(monthStart: Date) {
         self.monthStart = monthStart
         let end = Calendar.current.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
         _expenses = Query(
             filter: #Predicate<Expense> { expense in
-                expense.date >= monthStart && expense.date < end
+                expense.date >= monthStart && expense.date < end && expense.deletedDate == nil
             },
             sort: \Expense.date,
             order: .reverse
         )
     }
 
-    private var total: Decimal { expenses.reduce(0) { $0 + $1.amount } }
+    private var total: Double { expenses.reduce(0) { $0 + $1.amount } }
 
     private var title: String {
         monthStart.formatted(.dateTime.month(.wide).year())
@@ -74,17 +74,17 @@ struct ExpenseMonthDetailView: View {
         ), titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 if let (items, offsets) = pendingDelete {
-                    for index in offsets { modelContext.delete(items[index]) }
+                    for index in offsets { items[index].deletedDate = .now }
                 }
                 pendingDelete = nil
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
         } message: {
-            Text("This cannot be undone.")
+            Text("You can restore this from Recently Deleted for 30 days.")
         }
     }
 
     private func deleteExpenses(from list: [Expense], at offsets: IndexSet) {
-        for index in offsets { modelContext.delete(list[index]) }
+        for index in offsets { list[index].deletedDate = .now }
     }
 }

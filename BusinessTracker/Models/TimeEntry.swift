@@ -2,22 +2,24 @@ import Foundation
 import SwiftData
 
 @Model
-final class TimeEntry {
-    var date: Date
+final class TimeEntry: SoftDeletable {
+    var date: Date = Date.now
     var client: Client?
     var project: Project?
-    var hours: Double
-    var hourlyRate: Decimal
-    var notes: String
+    var hours: Double = 0
+    var hourlyRate: Double = 0
+    var notes: String = ""
+    var invoice: Invoice? = nil
+    var deletedDate: Date? = nil
 
-    var earnings: Decimal { Decimal(hours) * hourlyRate }
+    var earnings: Double { hours * hourlyRate }
 
     init(
         date: Date = .now,
         client: Client? = nil,
         project: Project? = nil,
         hours: Double,
-        hourlyRate: Decimal,
+        hourlyRate: Double,
         notes: String = ""
     ) {
         self.date = date

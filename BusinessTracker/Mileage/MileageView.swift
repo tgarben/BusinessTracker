@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct MileageView: View {
-    @Query(sort: \MileageTrip.date, order: .reverse) private var trips: [MileageTrip]
+    @Query(filter: #Predicate<MileageTrip> { $0.deletedDate == nil }, sort: \MileageTrip.date, order: .reverse) private var trips: [MileageTrip]
     @Environment(\.modelContext) private var modelContext
 
     @State private var showLogTrip = false
@@ -100,19 +100,19 @@ struct MileageView: View {
             ), titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let (items, offsets) = pendingDelete {
-                        for index in offsets { modelContext.delete(items[index]) }
+                        for index in offsets { items[index].deletedDate = .now }
                     }
                     pendingDelete = nil
                 }
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: {
-                Text("This cannot be undone.")
+                Text("You can restore this from Recently Deleted for 30 days.")
             }
         }
     }
 
     private func deleteTrips(from trips: [MileageTrip], at offsets: IndexSet) {
-        for index in offsets { modelContext.delete(trips[index]) }
+        for index in offsets { trips[index].deletedDate = .now }
     }
 }
 
@@ -188,6 +188,12 @@ struct TripRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    if !trip.waypoints.isEmpty {
+                        Text("via \(trip.waypoints.joined(separator: ", "))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
                     Text(trip.endLocation)
                         .font(.caption)
                         .foregroundStyle(.secondary)

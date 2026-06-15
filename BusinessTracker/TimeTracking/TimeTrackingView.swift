@@ -3,7 +3,7 @@ import SwiftData
 
 struct TimeTrackingView: View {
     @Environment(TimerState.self) private var timerState
-    @Query(sort: \TimeEntry.date, order: .reverse) private var entries: [TimeEntry]
+    @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }, sort: \TimeEntry.date, order: .reverse) private var entries: [TimeEntry]
 
     @State private var showLogTime = false
     @State private var showTimer = false
@@ -19,7 +19,7 @@ struct TimeTrackingView: View {
     }
 
     private var weekHours: Double { weekEntries.reduce(0) { $0 + $1.hours } }
-    private var weekEarnings: Decimal { weekEntries.reduce(0) { $0 + $1.earnings } }
+    private var weekEarnings: Double  { weekEntries.reduce(0) { $0 + $1.earnings } }
 
     var body: some View {
         NavigationStack {
@@ -81,16 +81,9 @@ struct TimeTrackingView: View {
                         Image(systemName: "gearshape")
                     }
                 }
-                ToolbarSpacer(placement: .topBarLeading)
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showPresets = true } label: {
                         Image(systemName: "ellipsis.circle")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showTimer = true } label: {
-                        Image(systemName: "timer")
-                            .symbolEffect(.variableColor, isActive: timerState.isRunning)
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -104,7 +97,7 @@ struct TimeTrackingView: View {
             }
             .sheet(isPresented: $showTimer) {
                 TimerSheet()
-                    .presentationDetents([.medium])
+                    .presentationDetents([.medium,.large])
             }
             .sheet(isPresented: $showPresets) {
                 PresetsView()
@@ -115,19 +108,35 @@ struct TimeTrackingView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
+            .overlay(alignment: .bottomTrailing) {
+                if !timerState.isRunning {
+                    Button { showTimer = true } label: {
+                        Image(systemName: "play.fill")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 58, height: 58)
+                            .background(.indigo, in: Circle())
+                            .shadow(color: .indigo.opacity(0.35), radius: 10, x: 0, y: 4)
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(duration: 0.3), value: timerState.isRunning)
             .confirmationDialog("Delete Time Entry?", isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }
             ), titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let (items, offsets) = pendingDelete {
-                        for index in offsets { modelContext.delete(items[index]) }
+                        for index in offsets { items[index].deletedDate = .now }
                     }
                     pendingDelete = nil
                 }
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: {
-                Text("This cannot be undone.")
+                Text("You can restore this from Recently Deleted for 30 days.")
             }
         }
     }
@@ -135,7 +144,7 @@ struct TimeTrackingView: View {
     @Environment(\.modelContext) private var modelContext
 
     private func deleteEntries(from entries: [TimeEntry], at offsets: IndexSet) {
-        for index in offsets { modelContext.delete(entries[index]) }
+        for index in offsets { entries[index].deletedDate = .now }
     }
 }
 
@@ -143,7 +152,7 @@ struct TimeTrackingView: View {
 
 private struct WeekSummaryCard: View {
     let hours: Double
-    let earnings: Decimal
+    let earnings: Double
 
     var body: some View {
         HStack(spacing: 0) {

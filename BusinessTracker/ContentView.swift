@@ -8,17 +8,18 @@ struct ContentView: View {
     @State private var showLogTime = false
     @State private var showLogTrip = false
     @State private var showAddExpense = false
+    @State private var showCreateInvoice = false
 
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house") {
                 HomeView()
             }
-            Tab("Time", systemImage: "clock") {
-                TimeTrackingView()
-            }
             Tab("Mileage", systemImage: "car") {
                 MileageView()
+            }
+            Tab("Time", systemImage: "clock") {
+                TimeTrackingView()
             }
             Tab("Expenses", systemImage: "creditcard") {
                 ExpensesView()
@@ -27,18 +28,20 @@ struct ContentView: View {
                 ClientsView()
             }
         }
-        .sheet(isPresented: $showTimer)      { TimerSheet().presentationDetents([.medium]) }
-        .sheet(isPresented: $showLogTime)    { LogTimeView() }
-        .sheet(isPresented: $showLogTrip)    { LogTripView() }
-        .sheet(isPresented: $showAddExpense) { AddExpenseView() }
+        .sheet(isPresented: $showTimer)         { TimerSheet().presentationDetents([.medium,.large]) }
+        .sheet(isPresented: $showLogTime)       { LogTimeView() }
+        .sheet(isPresented: $showLogTrip)       { LogTripView() }
+        .sheet(isPresented: $showAddExpense)    { AddExpenseView() }
+        .sheet(isPresented: $showCreateInvoice) { InvoiceQuickActionSheet() }
 .onChange(of: timerState.pendingWidgetAction) { _, action in
             guard let action else { return }
             timerState.pendingWidgetAction = nil
             switch action {
-            case .startTimer:  showTimer = true
-            case .logTime:     showLogTime = true
-            case .logTrip:     showLogTrip = true
-            case .addExpense:  showAddExpense = true
+            case .startTimer:    showTimer = true
+            case .logTime:       showLogTime = true
+            case .logTrip:       showLogTrip = true
+            case .addExpense:    showAddExpense = true
+            case .createInvoice: showCreateInvoice = true
             }
         }
     }

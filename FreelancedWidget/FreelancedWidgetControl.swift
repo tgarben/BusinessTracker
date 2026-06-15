@@ -20,7 +20,7 @@ struct FreelancedWidgetControl: ControlWidget {
             ControlWidgetToggle(
                 "Start Timer",
                 isOn: value.isRunning,
-                action: StartTimerIntent(value.name)
+                action: TimerControlIntent(value.name)
             ) { isRunning in
                 Label(isRunning ? "On" : "Off", systemImage: "timer")
             }
@@ -55,7 +55,7 @@ struct TimerConfiguration: ControlConfigurationIntent {
     var timerName: String
 }
 
-struct StartTimerIntent: SetValueIntent {
+struct TimerControlIntent: SetValueIntent {
     static let title: LocalizedStringResource = "Start a timer"
 
     @Parameter(title: "Timer Name")
@@ -71,7 +71,6 @@ struct StartTimerIntent: SetValueIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        // Start the timer…
         return .result()
     }
 }

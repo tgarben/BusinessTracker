@@ -23,6 +23,17 @@ func shortAddress(_ completion: MKLocalSearchCompletion) -> String {
     return [completion.title, location].filter { !$0.isEmpty }.joined(separator: ", ")
 }
 
+/// Full address (title + entire subtitle, country dropped) — keeps the street number for
+/// POIs and the ZIP for plain addresses. Used for CSV export so accountants get the real address.
+func fullAddress(_ completion: MKLocalSearchCompletion) -> String {
+    var parts = completion.subtitle.components(separatedBy: ", ")
+    if let last = parts.last, last.range(of: #"\d"#, options: .regularExpression) == nil, parts.count >= 3 {
+        parts.removeLast()  // drop a trailing country token (no digits, e.g. "United States")
+    }
+    let subtitle = parts.joined(separator: ", ")
+    return [completion.title, subtitle].filter { !$0.isEmpty }.joined(separator: ", ")
+}
+
 // MARK: - Address autocomplete
 
 @Observable
@@ -138,6 +149,16 @@ func calculateDrivingMiles(from: LocationResult, to: LocationResult) async throw
     }
 
     return route.distance / 1609.344  // metres → miles
+}
+
+/// Sums driving distance across an ordered list of stops (start, …waypoints…, end).
+func calculateDrivingMiles(stops: [LocationResult]) async throws -> Double {
+    guard stops.count >= 2 else { throw MileageCalculationError.noRouteFound }
+    var total: Double = 0
+    for i in 0..<(stops.count - 1) {
+        total += try await calculateDrivingMiles(from: stops[i], to: stops[i + 1])
+    }
+    return total
 }
 
 private func mapItem(for result: LocationResult) async throws -> MKMapItem {

@@ -11,6 +11,10 @@ struct AddEditClientView: View {
     @State private var workingClient: Client?
     @State private var isNewClient = false
     @State private var name: String = ""
+    @State private var companyName: String = ""
+    @State private var billingAddress: String = ""
+    @State private var email: String = ""
+    @State private var phone: String = ""
     @State private var photoItem: PhotosPickerItem?
     @State private var photoData: Data?
     @State private var projectToEdit: Project?
@@ -59,10 +63,27 @@ struct AddEditClientView: View {
                     TextField("Client name", text: $name)
                 }
 
+                // MARK: Billing details (for invoices)
+                Section {
+                    TextField("Company name (optional)", text: $companyName)
+                    TextField("Billing address", text: $billingAddress, axis: .vertical)
+                        .lineLimit(2...4)
+                    TextField("Email", text: $email)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("Phone", text: $phone)
+                        .keyboardType(.phonePad)
+                } header: {
+                    Text("Billing Details")
+                } footer: {
+                    Text("Shown as the \"bill to\" details on this client's invoices.")
+                }
+
                 // MARK: Projects
                 if let client = workingClient {
                     Section {
-                        ForEach(client.projects.sorted { $0.name < $1.name }) { project in
+                        ForEach((client.projects ?? []).sorted { $0.name < $1.name }) { project in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(project.name)
@@ -79,7 +100,7 @@ struct AddEditClientView: View {
                             .onTapGesture { projectToEdit = project }
                         }
                         .onDelete { offsets in
-                            let sorted = client.projects.sorted { $0.name < $1.name }
+                            let sorted = (client.projects ?? []).sorted { $0.name < $1.name }
                             for i in offsets { modelContext.delete(sorted[i]) }
                         }
 
@@ -124,6 +145,10 @@ struct AddEditClientView: View {
             workingClient = existing
             name = existing.name
             photoData = existing.photoData
+            companyName = existing.companyName
+            billingAddress = existing.billingAddress
+            email = existing.email
+            phone = existing.phone
         } else {
             let newClient = Client(name: "")
             modelContext.insert(newClient)
@@ -143,6 +168,10 @@ struct AddEditClientView: View {
         guard let client = workingClient else { return }
         client.name = name.trimmingCharacters(in: .whitespaces)
         client.photoData = photoData
+        client.companyName = companyName.trimmingCharacters(in: .whitespaces)
+        client.billingAddress = billingAddress.trimmingCharacters(in: .whitespaces)
+        client.email = email.trimmingCharacters(in: .whitespaces)
+        client.phone = phone.trimmingCharacters(in: .whitespaces)
         dismiss()
     }
 }

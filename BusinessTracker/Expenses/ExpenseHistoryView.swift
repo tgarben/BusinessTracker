@@ -3,7 +3,7 @@ import SwiftData
 
 struct ExpenseHistoryView: View {
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Expense.date, order: .reverse) private var allExpenses: [Expense]
+    @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }, sort: \Expense.date, order: .reverse) private var allExpenses: [Expense]
 
     private var months: [Date] {
         let cal = Calendar.current
@@ -16,7 +16,7 @@ struct ExpenseHistoryView: View {
             List {
                 ForEach(months, id: \.self) { monthStart in
                     let monthExpenses = expenses(for: monthStart)
-                    let total = monthExpenses.reduce(Decimal(0)) { $0 + $1.amount }
+                    let total = monthExpenses.reduce(0.0) { $0 + $1.amount }
                     let count = monthExpenses.count
 
                     NavigationLink {

@@ -45,7 +45,7 @@ struct IncomeRow: View {
 
 struct IncomeEditView: View {
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
 
     let entry: IncomeEntry
 
@@ -61,7 +61,7 @@ struct IncomeEditView: View {
 
     private var canSave: Bool {
         !source.trimmingCharacters(in: .whitespaces).isEmpty &&
-        (Decimal(string: amountText) ?? 0) > 0
+        (Double(amountText) ?? 0) > 0
     }
 
     var body: some View {
@@ -78,6 +78,14 @@ struct IncomeEditView: View {
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
                             .frame(width: 100)
+                            .onChange(of: amountText) { _, new in
+                                var s = new.filter { $0.isNumber || $0 == "." }
+                                if let dot = s.firstIndex(of: ".") {
+                                    let frac = String(s[s.index(after: dot)...].filter(\.isNumber).prefix(2))
+                                    s = String(s[..<dot]) + "." + frac
+                                }
+                                if s != new { amountText = s }
+                            }
                     }
                 }
 
@@ -132,7 +140,7 @@ struct IncomeEditView: View {
     private func load() {
         date = entry.date
         source = entry.source
-        amountText = entry.amount.formatted(.number)
+        amountText = String(format: "%.2f", entry.amount)
         selectedClient = entry.client
         notes = entry.notes
     }
@@ -140,7 +148,7 @@ struct IncomeEditView: View {
     private func save() {
         entry.date = date
         entry.source = source.trimmingCharacters(in: .whitespaces)
-        entry.amount = Decimal(string: amountText) ?? 0
+        entry.amount = Double(amountText) ?? 0
         entry.client = selectedClient
         entry.notes = notes
         dismiss()

@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct ExpensesView: View {
-    @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
+    @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }, sort: \Expense.date, order: .reverse) private var expenses: [Expense]
     @Environment(\.modelContext) private var modelContext
 
     @State private var showAddExpense = false
@@ -19,7 +19,7 @@ struct ExpensesView: View {
         expenses.filter { $0.date >= monthStart }
     }
 
-    private var monthTotal: Decimal {
+    private var monthTotal: Double {
         monthExpenses.reduce(0) { $0 + $1.amount }
     }
 
@@ -105,26 +105,26 @@ struct ExpensesView: View {
             ), titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let (items, offsets) = pendingDelete {
-                        for index in offsets { modelContext.delete(items[index]) }
+                        for index in offsets { items[index].deletedDate = .now }
                     }
                     pendingDelete = nil
                 }
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: {
-                Text("This cannot be undone.")
+                Text("You can restore this from Recently Deleted for 30 days.")
             }
         }
     }
 
     private func deleteExpenses(from list: [Expense], at offsets: IndexSet) {
-        for index in offsets { modelContext.delete(list[index]) }
+        for index in offsets { list[index].deletedDate = .now }
     }
 }
 
 // MARK: - Summary card
 
 struct ExpenseSummaryCard: View {
-    let total: Decimal
+    let total: Double
     let count: Int
     let label: String
 

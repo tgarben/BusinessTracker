@@ -1,5 +1,6 @@
-import WidgetKit
+import AppIntents
 import SwiftUI
+import WidgetKit
 
 // MARK: - Timeline entries
 
@@ -26,8 +27,9 @@ struct SingleActionProvider: AppIntentTimelineProvider {
 
     func timeline(for configuration: SingleActionConfiguration, in context: Context) async -> Timeline<SingleActionEntry> {
         let entry = SingleActionEntry(date: .now, configuration: configuration)
-        let reload = Calendar.current.date(byAdding: .hour, value: 24, to: .now)!
-        return Timeline(entries: [entry], policy: .after(reload))
+        // .never — this widget has no time-varying content; WidgetKit reloads
+        // automatically when the user changes the AppIntentConfiguration.
+        return Timeline(entries: [entry], policy: .never)
     }
 }
 
@@ -42,12 +44,11 @@ struct QuadActionProvider: AppIntentTimelineProvider {
 
     func timeline(for configuration: QuadActionConfiguration, in context: Context) async -> Timeline<QuadActionEntry> {
         let entry = QuadActionEntry(date: .now, configuration: configuration)
-        let reload = Calendar.current.date(byAdding: .hour, value: 24, to: .now)!
-        return Timeline(entries: [entry], policy: .after(reload))
+        return Timeline(entries: [entry], policy: .never)
     }
 }
 
-// MARK: - Small widget view (single action)
+// MARK: - Small / lock screen widget view (single action)
 
 struct SingleActionWidgetView: View {
     let entry: SingleActionEntry
@@ -55,24 +56,25 @@ struct SingleActionWidgetView: View {
     private var action: WidgetQuickAction { entry.configuration.action }
 
     var body: some View {
-        Link(destination: action.deepLink) {
-            VStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(action.color.opacity(0.18))
-                        .frame(width: 56, height: 56)
-                    Image(systemName: action.icon)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(action.color)
-                }
-
-                Text(action.label)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(action.color.opacity(0.18))
+                    .frame(width: 56, height: 56)
+                Image(systemName: action.icon)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(action.color)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text(action.label)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .widgetURL(action.deepLink)
+        .containerBackground(for: .widget) {
+            action.color.opacity(0.08)
         }
     }
 }
@@ -88,7 +90,7 @@ struct QuadActionWidgetView: View {
             columns: [GridItem(.flexible()), GridItem(.flexible())],
             spacing: 10
         ) {
-            ForEach(actions, id: \.rawValue) { action in
+            ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
                 Link(destination: action.deepLink) {
                     WidgetActionCell(action: action)
                 }
@@ -147,13 +149,10 @@ struct FreelancedSmallWidget: Widget {
             provider: SingleActionProvider()
         ) { entry in
             SingleActionWidgetView(entry: entry)
-                .containerBackground(
-                    entry.configuration.action.color.opacity(0.08),
-                    for: .widget
-                )
+            // containerBackground handled inside SingleActionWidgetView per widgetFamily
         }
         .configurationDisplayName("Quick Action")
-        .description("One-tap shortcut to your most-used action.")
+        .description("One-tap shortcut — add to home screen or lock screen.")
         .supportedFamilies([.systemSmall])
     }
 }

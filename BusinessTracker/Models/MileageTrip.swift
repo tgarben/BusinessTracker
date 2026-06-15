@@ -2,14 +2,32 @@ import Foundation
 import SwiftData
 
 @Model
-final class MileageTrip {
-    var id: UUID
-    var date: Date
-    var startLocation: String
-    var endLocation: String
-    var miles: Double
-    var purpose: String
-    var notes: String
+final class MileageTrip: SoftDeletable {
+    var id: UUID = UUID()
+    var date: Date = Date.now
+    var startLocation: String = ""
+    var endLocation: String = ""
+    var miles: Double = 0
+    var purpose: String = ""
+    var notes: String = ""
+    var waypoints: [String] = []   // intermediate stops between start and end (in order)
+    var startAddress: String = ""  // full address for export (startLocation is the short display label)
+    var endAddress: String = ""
+    var deletedDate: Date? = nil
+
+    /// Full address if captured, otherwise the display label (older trips).
+    var startAddressForExport: String { startAddress.isEmpty ? startLocation : startAddress }
+    var endAddressForExport: String { endAddress.isEmpty ? endLocation : endAddress }
+
+    /// Full ordered route: start → waypoints… → end (empties dropped).
+    var allStops: [String] {
+        ([startLocation] + waypoints + [endLocation]).filter { !$0.isEmpty }
+    }
+
+    /// "Start → Via → End" for display.
+    var routeDescription: String {
+        allStops.joined(separator: " → ")
+    }
 
     /// IRS standard mileage rate — stored in UserDefaults, editable in Settings
     static let defaultRatePerMile: Double = 0.70

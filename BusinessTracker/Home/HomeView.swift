@@ -35,21 +35,25 @@ enum QuickAction: String, CaseIterable {
     case logTime
     case logTrip
     case addExpense
+    case createInvoice
+
     var label: String {
         switch self {
-        case .startTimer:  return "Start Timer"
-        case .logTime:     return "Log Time"
-        case .logTrip:     return "Log Trip"
-        case .addExpense:  return "Add Expense"
+        case .startTimer:    return "Start Timer"
+        case .logTime:       return "Log Time"
+        case .logTrip:       return "Log Trip"
+        case .addExpense:    return "Add Expense"
+        case .createInvoice: return "Create Invoice"
         }
     }
 
     var icon: String {
         switch self {
-        case .startTimer:  return "play.fill"
-        case .logTime:     return "clock.fill"
-        case .logTrip:     return "car.fill"
-        case .addExpense:  return "creditcard.fill"
+        case .startTimer:    return "play.fill"
+        case .logTime:       return "clock.fill"
+        case .logTrip:       return "car.fill"
+        case .addExpense:    return "creditcard.fill"
+        case .createInvoice: return "doc.text.fill"
         }
     }
 
@@ -65,20 +69,21 @@ enum QuickAction: String, CaseIterable {
         case .startTimer, .logTime: return .indigo
         case .logTrip:              return .blue
         case .addExpense:           return .red
+        case .createInvoice:        return .purple
         }
     }
 
-    static let defaultOrderString = "startTimer,logTime,logTrip,addExpense"
-    static let defaultEnabledString = "startTimer,logTime,logTrip,addExpense"
+    static let defaultOrderString = "startTimer,logTime,logTrip,addExpense,createInvoice"
+    static let defaultEnabledString = "startTimer,logTime,logTrip,addExpense,createInvoice"
 }
 
 // MARK: - HomeView
 
 struct HomeView: View {
     @Environment(TimerState.self) private var timerState
-    @Query private var timeEntries: [TimeEntry]
-    @Query private var trips: [MileageTrip]
-    @Query private var expenses: [Expense]
+    @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }) private var timeEntries: [TimeEntry]
+    @Query(filter: #Predicate<MileageTrip> { $0.deletedDate == nil }) private var trips: [MileageTrip]
+    @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }) private var expenses: [Expense]
 
     @AppStorage("user_name") private var userName: String = ""
     @AppStorage("home_sectionOrder") private var sectionOrderString: String = HomeSection.defaultOrderString
@@ -89,6 +94,7 @@ struct HomeView: View {
     @State private var showTimer = false
     @State private var showLogTrip = false
     @State private var showAddExpense = false
+    @State private var showCreateInvoice = false
     @State private var showSettings = false
     @State private var showEditLayout = false
     @State private var showReports = false
@@ -106,13 +112,13 @@ struct HomeView: View {
 
     private var todayHours: Double   { todayEntries.reduce(0) { $0 + $1.hours } }
     private var todayMiles: Double   { todayTrips.reduce(0) { $0 + $1.miles } }
-    private var todaySpend: Decimal  { todayExpenses.reduce(0) { $0 + $1.amount } }
+    private var todaySpend: Double   { todayExpenses.reduce(0) { $0 + $1.amount } }
 
     // MARK: Week aggregates
 
     private var weekEntries: [TimeEntry] { timeEntries.filter { $0.date >= weekStart } }
     private var weekHours: Double     { weekEntries.reduce(0) { $0 + $1.hours } }
-    private var weekEarnings: Decimal { weekEntries.reduce(0) { $0 + $1.earnings } }
+    private var weekEarnings: Double  { weekEntries.reduce(0) { $0 + $1.earnings } }
 
     private var hoursSubtitle: String {
         let days = max(Calendar.current.component(.weekday, from: .now), 1)
@@ -121,22 +127,15 @@ struct HomeView: View {
 
     private var earningsSubtitle: String {
         let days = max(Calendar.current.component(.weekday, from: .now), 1)
-        let avg = weekEarnings / Decimal(days)
+        let avg = weekEarnings / Double(days)
         return "\(avg.formatted(.currency(code: "USD")))/day avg"
     }
 
     // MARK: Greeting
 
     private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: .now)
-        let base: String
-        switch hour {
-        case 0..<12:  base = "Good morning"
-        case 12..<17: base = "Good afternoon"
-        default:      base = "Good evening"
-        }
         let name = userName.trimmingCharacters(in: .whitespaces)
-        return name.isEmpty ? base : "\(base), \(name)"
+        return name.isEmpty ? "Hey," : "Hey \(name),"
     }
 
     // MARK: Parsed order helpers
@@ -184,7 +183,8 @@ struct HomeView: View {
                                     showTimer: $showTimer,
                                     showLogTime: $showLogTime,
                                     showLogTrip: $showLogTrip,
-                                    showAddExpense: $showAddExpense)
+                                    showAddExpense: $showAddExpense,
+                                    showCreateInvoice: $showCreateInvoice)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -212,10 +212,11 @@ struct HomeView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showLogTime)    { LogTimeView() }
-            .sheet(isPresented: $showTimer)      { TimerSheet().presentationDetents([.medium]) }
-            .sheet(isPresented: $showLogTrip)    { LogTripView() }
-            .sheet(isPresented: $showAddExpense) { AddExpenseView() }
+            .sheet(isPresented: $showLogTime)       { LogTimeView() }
+            .sheet(isPresented: $showTimer)         { TimerSheet().presentationDetents([.medium,.large]) }
+            .sheet(isPresented: $showLogTrip)       { LogTripView() }
+            .sheet(isPresented: $showAddExpense)    { AddExpenseView() }
+            .sheet(isPresented: $showCreateInvoice) { InvoiceQuickActionSheet() }
             .sheet(isPresented: $showReports)    { ReportsView().presentationDragIndicator(.visible) }
             .sheet(isPresented: $showSettings)   { SettingsView() }
             .sheet(isPresented: $showEditLayout) {
@@ -237,9 +238,9 @@ private struct HomeSectionCard: View {
     let enabledQuickActions: [QuickAction]
     let todayHours: Double
     let todayMiles: Double
-    let todaySpend: Decimal
+    let todaySpend: Double
     let weekHours: Double
-    let weekEarnings: Decimal
+    let weekEarnings: Double
     let hoursSubtitle: String
     let earningsSubtitle: String
 
@@ -247,6 +248,7 @@ private struct HomeSectionCard: View {
     @Binding var showLogTime: Bool
     @Binding var showLogTrip: Bool
     @Binding var showAddExpense: Bool
+    @Binding var showCreateInvoice: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -285,11 +287,12 @@ private struct HomeSectionCard: View {
                 let isActive = action == .startTimer && timerRunning
                 Button {
                     switch action {
-                    case .startTimer:  showTimer = true
-                    case .logTime:     showLogTime = true
-                    case .logTrip:     showLogTrip = true
-                    case .addExpense:  showAddExpense = true
-}
+                    case .startTimer:    showTimer = true
+                    case .logTime:       showLogTime = true
+                    case .logTrip:       showLogTrip = true
+                    case .addExpense:    showAddExpense = true
+                    case .createInvoice: showCreateInvoice = true
+                    }
                 } label: {
                     QuickActionCell(action: action, isActive: isActive)
                 }

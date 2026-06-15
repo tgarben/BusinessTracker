@@ -9,13 +9,14 @@ private enum EntryMode: String, CaseIterable {
 struct LogTimeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
 
     @AppStorage("default_hourlyRate") private var defaultHourlyRate: Double = 0
 
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
-    @State private var hourlyRate: Decimal = 0
+    @State private var hourlyRate: Double = 0
+    @State private var rateText: String = ""
     @State private var notes: String = ""
 
     // Duration mode
@@ -34,7 +35,7 @@ struct LogTimeView: View {
     var prefillProject: Project? = nil
 
     private var availableProjects: [Project] {
-        selectedClient?.projects.sorted { $0.name < $1.name } ?? []
+        (selectedClient?.projects ?? []).sorted { $0.name < $1.name }
     }
 
     private var resolvedHours: Double {
@@ -50,7 +51,7 @@ struct LogTimeView: View {
         entryMode == .startEnd ? startTime : date
     }
 
-    private var earnings: Decimal { Decimal(resolvedHours) * hourlyRate }
+    private var earnings: Double { resolvedHours * hourlyRate }
 
     private var canSave: Bool {
         guard resolvedHours > 0 else { return false }
@@ -71,6 +72,7 @@ struct LogTimeView: View {
                     .onChange(of: selectedClient) { _, _ in
                         selectedProject = nil
                         hourlyRate = 0
+                        rateText = ""
                     }
 
                     if !availableProjects.isEmpty {
@@ -82,6 +84,7 @@ struct LogTimeView: View {
                         }
                         .onChange(of: selectedProject) { _, newProject in
                             hourlyRate = newProject?.hourlyRate ?? 0
+                            rateText = hourlyRate > 0 ? String(format: "%.2f", hourlyRate) : ""
                         }
                     }
                 }
@@ -125,9 +128,21 @@ struct LogTimeView: View {
 
                 Section("Rate") {
                     LabeledContent("Hourly Rate") {
-                        TextField("0.00", value: $hourlyRate, format: .currency(code: "USD"))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                        HStack(spacing: 2) {
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("0.00", text: $rateText)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                                .onChange(of: rateText) { _, new in
+                                    var s = new.filter { $0.isNumber || $0 == "." }
+                                    if let dot = s.firstIndex(of: ".") {
+                                        let frac = String(s[s.index(after: dot)...].filter(\.isNumber).prefix(2))
+                                        s = String(s[..<dot]) + "." + frac
+                                    }
+                                    if s != new { rateText = s }
+                                    hourlyRate = Double(s) ?? 0
+                                }
+                        }
                     }
                     if resolvedHours > 0 && hourlyRate > 0 {
                         LabeledContent("Total") {
@@ -159,8 +174,10 @@ struct LogTimeView: View {
                 if let p = prefillProject {
                     selectedProject = p
                     hourlyRate = p.hourlyRate
+                    rateText = hourlyRate > 0 ? String(format: "%.2f", hourlyRate) : ""
                 } else if defaultHourlyRate > 0 {
-                    hourlyRate = Decimal(defaultHourlyRate)
+                    hourlyRate = defaultHourlyRate
+                    rateText = String(format: "%.2f", hourlyRate)
                 }
                 if let h = prefillHours {
                     hours = h

@@ -4,21 +4,22 @@ import SwiftData
 struct TimeEntryEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var entry: TimeEntry
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
 
     // Local state mirrors the entry so we can cancel cleanly
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
     @State private var date: Date = .now
     @State private var hours: Double = 0
-    @State private var hourlyRate: Decimal = 0
+    @State private var hourlyRate: Double = 0
+    @State private var rateText: String = ""
     @State private var notes: String = ""
 
     private var availableProjects: [Project] {
-        selectedClient?.projects.sorted { $0.name < $1.name } ?? []
+        (selectedClient?.projects ?? []).sorted { $0.name < $1.name }
     }
 
-    private var earnings: Decimal { Decimal(hours) * hourlyRate }
+    private var earnings: Double { hours * hourlyRate }
 
     var body: some View {
         NavigationStack {
@@ -31,12 +32,12 @@ struct TimeEntryEditView: View {
                         }
                     }
                     .onChange(of: selectedClient) { _, newClient in
-                        // Only clear project if client actually changed
                         if newClient?.persistentModelID != selectedProject?.client?.persistentModelID {
                             selectedProject = nil
                         }
                         if let newClient, selectedProject == nil {
                             hourlyRate = 0
+                            rateText = ""
                         }
                     }
 
@@ -50,6 +51,7 @@ struct TimeEntryEditView: View {
                         .onChange(of: selectedProject) { _, newProject in
                             if let rate = newProject?.hourlyRate {
                                 hourlyRate = rate
+                                rateText = rate > 0 ? String(format: "%.2f", rate) : ""
                             }
                         }
                     }
@@ -66,9 +68,21 @@ struct TimeEntryEditView: View {
 
                 Section("Rate") {
                     LabeledContent("Hourly Rate") {
-                        TextField("0.00", value: $hourlyRate, format: .currency(code: "USD"))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                        HStack(spacing: 2) {
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("0.00", text: $rateText)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                                .onChange(of: rateText) { _, new in
+                                    var s = new.filter { $0.isNumber || $0 == "." }
+                                    if let dot = s.firstIndex(of: ".") {
+                                        let frac = String(s[s.index(after: dot)...].filter(\.isNumber).prefix(2))
+                                        s = String(s[..<dot]) + "." + frac
+                                    }
+                                    if s != new { rateText = s }
+                                    hourlyRate = Double(s) ?? 0
+                                }
+                        }
                     }
                     if hours > 0 && hourlyRate > 0 {
                         LabeledContent("Total") {
@@ -104,6 +118,7 @@ struct TimeEntryEditView: View {
         date            = entry.date
         hours           = entry.hours
         hourlyRate      = entry.hourlyRate
+        rateText        = hourlyRate > 0 ? String(format: "%.2f", hourlyRate) : ""
         notes           = entry.notes
     }
 

@@ -34,8 +34,38 @@ struct AddressSearchView: View {
                     .disabled(locationManager.isLocating)
                 }
 
-                // MARK: Body — recents or search results
+                // MARK: Body — favorites + recents or search results
                 if searcher.query.isEmpty {
+                    if !store.favorites.isEmpty {
+                        Section {
+                            ForEach(store.favorites) { fav in
+                                Button {
+                                    select(fav.locationResult, label: fav.label, coordinate: fav.coordinate)
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "star.fill")
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(.yellow)
+                                            .frame(width: 20)
+                                        Text(fav.label)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        store.toggleFavorite(fav)
+                                    } label: {
+                                        Label("Unstar", systemImage: "star.slash")
+                                    }
+                                }
+                            }
+                            .onDelete { store.removeFavorite(at: $0) }
+                        } header: {
+                            Text("Favorites")
+                        }
+                    }
+
                     if !store.recents.isEmpty {
                         Section {
                             ForEach(store.recents) { recent in
@@ -50,7 +80,16 @@ struct AddressSearchView: View {
                                         Text(recent.label)
                                             .foregroundStyle(.primary)
                                             .lineLimit(1)
+                                        Spacer()
                                     }
+                                }
+                                .swipeActions(edge: .leading) {
+                                    Button {
+                                        store.toggleFavorite(recent)
+                                    } label: {
+                                        Label("Favorite", systemImage: "star")
+                                    }
+                                    .tint(.yellow)
                                 }
                             }
                             .onDelete { offsets in

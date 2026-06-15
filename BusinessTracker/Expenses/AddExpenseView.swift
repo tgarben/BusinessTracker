@@ -5,7 +5,8 @@ import PhotosUI
 struct AddExpenseView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
+    @Query(sort: \ExpensePreset.sortOrder) private var presets: [ExpensePreset]
 
     @State private var date: Date = .now
     @State private var amountText: String = ""
@@ -19,12 +20,34 @@ struct AddExpenseView: View {
     @State private var previewImage: UIImage?
 
     private var canSave: Bool {
-        (Decimal(string: amountText) ?? 0) > 0
+        (Double(amountText) ?? 0) > 0
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                if !presets.isEmpty {
+                    Section("Presets") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(presets) { preset in
+                                    Button { applyPreset(preset) } label: {
+                                        Label(preset.name, systemImage: Expense.categoryIcon(preset.category))
+                                            .font(.caption.weight(.semibold))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+                                            .background(Color.red.opacity(0.12), in: Capsule())
+                                            .foregroundStyle(.red)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    }
+                }
+
                 Section("Details") {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
 
@@ -36,6 +59,14 @@ struct AddExpenseView: View {
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
                             .frame(width: 100)
+                            .onChange(of: amountText) { _, new in
+                                var s = new.filter { $0.isNumber || $0 == "." }
+                                if let dot = s.firstIndex(of: ".") {
+                                    let frac = String(s[s.index(after: dot)...].filter(\.isNumber).prefix(2))
+                                    s = String(s[..<dot]) + "." + frac
+                                }
+                                if s != new { amountText = s }
+                            }
                     }
 
                     Picker("Category", selection: $category) {
@@ -126,6 +157,8 @@ struct AddExpenseView: View {
                 CameraView { image in
                     receiptImages.append(image)
                     showCamera = false
+                } onCancel: {
+                    showCamera = false
                 }
                 .ignoresSafeArea()
             }
@@ -135,8 +168,16 @@ struct AddExpenseView: View {
         }
     }
 
+    private func applyPreset(_ preset: ExpensePreset) {
+        category = preset.category.isEmpty ? category : preset.category
+        notes = preset.notes
+        if let amount = preset.amount {
+            amountText = String(format: "%.2f", amount)
+        }
+    }
+
     private func save() {
-        let parsedAmount = Decimal(string: amountText) ?? 0
+        let parsedAmount = Double(amountText) ?? 0
         let expense = Expense(
             date: date,
             amount: parsedAmount,

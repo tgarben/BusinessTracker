@@ -26,41 +26,49 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 | Home Screen | ✅ Done (personalized, reorderable, configurable quick actions) |
 | Time Tracking | ✅ Done |
 | Mileage Tracking | ✅ Done |
-| Expense Tracking | 🔶 In progress (core done, multi-receipt done) |
-| Income & Tax Projection | ⬜ Not started |
-| Reports & Analytics | 🔶 In progress (month glance, mileage fuel analysis, top clients) |
-| Settings & Profile | 🔶 In progress (core sections done) |
-| iCloud Sync | 🔶 In progress (CloudKit wired, entitlements set, needs real-device validation) |
+| Expense Tracking | ✅ Done (multi-receipt, optional client link, expense presets) |
+| Clients Tab | ✅ Done (list + detail with photo, income + time + invoice sections, inline project creation) |
+| Income Tracking | ✅ Done (logged per-client from Clients tab; IncomeEntry model fully wired) |
+| Reports & Analytics | ✅ Done (3×2 glance, fuel analysis, mileage IRS deduction card, tax set-aside, top clients, client P&L, date range picker, PDF export via ShareLink) |
+| Invoicing | ✅ Done (full professional invoice: business info from Settings, customer billing details from Client, time entries + manual line items w/ qty/unit price, discount, sales tax, payment terms/instructions/methods, PO#, multi-page PDF, paid/unpaid, Create Invoice quick action) |
+| Settings & Profile | ✅ Done (Profile page with avatar header; presets management; all config sections) |
+| Recently Deleted (soft-delete) | ✅ Done (30-day trash + restore for all six record types; Settings → Recently Deleted) |
+| iCloud Sync | ✅ Done (confirmed working on device 2026-06-13) |
 | Package Tracking | ⬜ Future (API integration) |
-| Home Screen Widgets | 🔶 In progress (medium quick-actions widget done; small widget built but disabled — config persistence bug) |
-| Live Activities | ⬜ Future (ActivityKit) |
-| Lock Screen Actions | ⬜ Future (WidgetKit lock screen widgets) |
-| Shortcuts / Siri | ⬜ Future (App Intents) |
+| Home Screen Widgets | ✅ Done (medium 4-action + small single-action quick-action widgets; read-only Quarterly Tax Due Dates widget; Live Activity on timer start) |
+| Live Activities | ✅ Done (Dynamic Island + lock screen banner while timer runs; starts when app foregrounds after widget tap) |
+| Lock Screen Actions | ⬜ Deferred (built and removed — requires server push-to-start to launch Live Activity without opening app; revisit when MRR justifies Firebase Blaze) |
+| Shortcuts / Siri | ✅ Done (App Intents for Start Timer, Log Time, Log Trip, Add Expense; auto-registered AppShortcuts with Siri phrases) |
+| Tax deadline reminders | ✅ Done (opt-in local notifications a week + day before each quarterly IRS deadline) |
 | Pro tier (paid) | ⬜ Future |
 
 ---
 
 ## Tab bar navigation
 
-**Current tabs:** Home · Time · Mileage · Expenses · Reports (5 tabs, at iOS limit)
+**Current tabs:** Home · Time · Mileage · Expenses · Clients (5 tabs, at iOS limit)
 
 - **Settings** is accessible via a ⚙️ gear icon in the **top-left toolbar on every screen** — opens as a sheet
-- **Income** tab is removed until the feature is built — placeholder view and model still exist in codebase
-- Tab order reflects daily-use priority: Home first, then the three active tracking tabs, Reports last
+- **Reports** is accessible via a `chart.bar` toolbar button on the **Home screen** — opens as a sheet with drag indicator
+- Tab order reflects daily-use priority: Home first, then the three active tracking tabs, Clients last
 
 ---
 
 ## Data models
 
-- **`Client`** — `name`. Container only; rate lives on Project.
+- **`Client`** — `name`, `photoData: Data? = nil`, plus billing/customer fields `companyName`, `billingAddress`, `email`, `phone` (all `String = ""`, shown as "bill to" on invoices). Relationships: `projects` (cascade delete), `timeEntries` (nullify), `incomeEntries` (nullify), `expenses` (nullify), `timePresets` (nullify), `invoices` (cascade delete).
 - **`Project`** — `name`, `hourlyRate`, belongs to `Client`
-- **`TimeEntry`** — `date`, `client?`, `project?`, `hours`, `hourlyRate` (snapshot), `notes`
+- **`TimeEntry`** — `date`, `client?`, `project?`, `hours`, `hourlyRate` (snapshot), `notes`, `invoice?` (nullify on invoice delete)
+- **`Invoice`** — `invoiceNumber: Int`, `issueDate`, `dueDate`, `notes`, `isPaid: Bool`, `paidDate?`, `additionalAmount`/`additionalDescription` (legacy single extra, kept for migration), `discountAmount: Double`, `taxRate: Double` (percent), `paymentTerms`, `paymentInstructions`, `acceptedPayments`, `poNumber`, `client?`, `timeEntries` (nullify), `lineItems` (cascade → `InvoiceLineItem`). Computed: `subtotal` (time earnings + line items + legacy extra), `discountedSubtotal` (subtotal − discount), `taxAmount` (discounted × taxRate%), `total` (final amount due), `formattedNumber` = "INV-001". PDF via `ImageRenderer` → `makeInvoicePDF()`. **`subtotal` is pre-tax/discount; use `total` for the amount due** (InvoiceRow + detail show `total`).
+- **`InvoiceLineItem`** — manual invoice line: `itemDescription`, `quantity: Double`, `unitPrice: Double`, `sortOrder`, `invoice?`. Computed `lineTotal = quantity × unitPrice`. Coexists with time-entry billing.
 - **`TimePreset`** — `name`, `client?`, `project?`, `sortOrder`, `hourlyRateOverride?`, `notesTemplate`
-- **`MileageTrip`** — `date`, `startLocation`, `endLocation`, `miles`, `purpose`, `notes`. Computed `reimbursementAmount` using `ratePerMile` (IRS rate, currently 0.70)
+- **`MileageTrip`** — `date`, `startLocation`/`endLocation` (short display labels from `shortAddress`), `startAddress`/`endAddress` (full addresses for CSV export, captured via `fullAddress(_:)` at save), `miles`, `purpose`, `notes`, `waypoints: [String] = []` (intermediate stops, in order). Computed `reimbursementAmount` using `ratePerMile` (IRS rate, currently 0.70), `allStops`, `routeDescription`, `startAddressForExport`/`endAddressForExport` (full address, else display label for older trips).
+- **`MileagePreset`** / **`ExpensePreset`** — standalone saved templates (no relationships). MileagePreset: `name`, `startLocation`, `endLocation`, `purpose`, `notes`, `sortOrder`. ExpensePreset: `name`, `amount: Double?` (nil = variable), `category`, `notes`, `sortOrder`. Registered in the app Schema. Managed from Settings → Presets & Quick-Fill.
 - **`Expense`** — `date`, `amount`, `category`, `notes`, `receiptImageData?` (legacy — kept for migration), `receiptImagesData: [Data]` (current multi-image storage), `client?` (optional link). Categories defined in `Expense.categories`. Helper statics: `categoryIcon(_:)`, `categoryColor(_:)`
-- **`IncomeEntry`** — `date`, `source`, `amount`, `notes` (placeholder model, view not built)
-- **`TimerState`** — `@Observable` class (not SwiftData). Persists active timer start date to `UserDefaults` so timer survives backgrounding. Also holds `pendingWidgetAction: WidgetAction?` for routing widget deep links to the correct sheet.
-- **`WidgetAction`** — enum in `TimerState.swift`: `.startTimer`, `.logTime`, `.logTrip`, `.addExpense`. Set by `BusinessTrackerApp.handleWidgetDeepLink(_:)`, consumed by `ContentView`.
+- **`IncomeEntry`** — `date`, `source`, `amount`, `notes`, `client?`. Client is required in the UI (logged from ClientDetailView) but optional at the model level for migration safety.
+- **`TimerState`** — `@Observable` class (not SwiftData). Persists active timer start date to App Group `UserDefaults` so timer survives backgrounding and is readable by the widget extension. Starts/ends `Activity<TimerActivityAttributes>` for the Live Activity. `syncFromSharedStore()` method syncs from the App Group store on foreground — call this to pick up timers written by widget intents. Also holds `pendingWidgetAction: WidgetAction?` for routing widget deep links to the correct sheet.
+- **`WidgetAction`** — enum in `TimerState.swift`: `.startTimer`, `.logTime`, `.logTrip`, `.addExpense`, `.createInvoice`. Set by `BusinessTrackerApp.handleWidgetDeepLink(_:)`, consumed by `ContentView`.
+- **`TimerActivityAttributes`** — `ActivityAttributes` struct in `BusinessTracker/Models/TimerActivityAttributes.swift`. `ContentState` holds `startDate: Date`. Also duplicated (identical) in `FreelancedWidget/FreelancedLiveActivity.swift` — the two targets are separate Swift modules so they cannot share the type directly. **Keep both in sync.**
 
 ---
 
@@ -81,9 +89,10 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Personalized greeting:** "Good morning, Jack" — reads `@AppStorage("user_name")`
 - **Reorderable sections:** Three sections (Quick Actions, Today, This Week) stored as an ordered comma-separated string in `@AppStorage("home_sectionOrder")`. Active timer card is always pinned at top.
 - **Configurable quick actions:** Enabled actions + order stored in `@AppStorage("home_quickActionOrder")` and `@AppStorage("home_quickActionEnabled")`. Defined by `QuickAction` enum in `HomeView.swift`.
-- **Quick Actions display:** 2-wide `LazyVGrid` of individually rounded cards (`QuickActionCell`) — icon in a filled circle, label below, subtle color tint + stroke border per action. Cards use `action.color.opacity(0.07)` fill and `0.12` stroke.
+- **Quick Actions:** Start Timer (indigo), Log Time (indigo), Log Trip (blue), Add Expense (red), Create Invoice (purple). 2-wide `LazyVGrid` of individually rounded cards.
 - **Zero quick actions:** if `home_quickActionEnabled` is empty, the Quick Actions section is completely hidden from the home screen. In `HomeLayoutEditor`, the Quick Actions row in Section Order shows "No actions enabled" in tertiary text and its drag handle is hidden.
 - **Customize Home sheet:** `slider.horizontal.3` toolbar button → `HomeLayoutEditor` sheet. Always in edit mode (`.constant(.active)`). Two sections: Section Order (drag to reorder) and Quick Actions (toggle + drag to reorder). Done saves, Cancel discards. No minimum action count enforced.
+- **Reports button:** `chart.bar` toolbar button (top-right, alongside customize button) → `ReportsView` as a sheet with `.presentationDragIndicator(.visible)`
 - **Section rendering:** Each section is a single `List` row (`HomeSectionCard`) with a clear background so drag-to-reorder in the editor works correctly. Home uses `.listStyle(.plain)` with `Color(.systemGroupedBackground)`.
 - **Today at a glance:** three stat cells (hours, miles, spend). Stats go muted when empty.
 - **This week:** hours + earnings cells with per-day average subtitle.
@@ -112,8 +121,8 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
   - Stop → auto-saves immediately with known client/project/rate/notes template
   - Animated ✓ confirmation shown ~1.8s then sheet auto-dismisses
   - No post-stop form unless user taps into the saved entry to edit
-- **Presets** (`TimePreset`): named combos of client + project + optional rate override + optional notes template. Managed from `⋯` button (opens `PresetsView` directly — no menu, single item). Reorderable.
-- **Clients & Projects** managed exclusively from Settings → Business section (removed from `⋯` menu)
+- **Presets** (`TimePreset`): named combos of client + project + optional rate override + optional notes template. Managed from `⋯` button in `TimeTrackingView` (trailing toolbar, next to `+`) or the prominent "Manage Presets" / "Create a Preset" button in `TimerSheet` — both open `PresetsView`. Active preset chip is highlighted indigo in the timer sheet. Reorderable.
+- **Clients & Projects** managed from the Clients tab (not Settings)
 - **Tap any entry** to open `TimeEntryEditView` — edit all fields including notes
 - **Week summary card** at top of Time Tracking screen — hidden when no entries exist (only `ContentUnavailableView` shown)
 - **Swipe to delete** shows confirmation dialog before deleting
@@ -130,6 +139,10 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Tap any trip** (in both `MileageView` and `MileageMonthDetailView`) to open `MileageTripEditView`
 - **`MileageTripEditView`** has a Manual / Address mode toggle matching `LogTripView` — switch to Address mode to pick new locations and recalculate distance
 - **Swipe to delete** shows confirmation dialog before deleting
+- **Trip purpose presets:** quick-fill chips below the purpose field in `LogTripView`/`MileageTripEditView`, backed by `@AppStorage("mileage_purposePresets")` (comma-separated; defaults Client Visit, Office, Airport, Errand, Medical). Managed in Settings → Trip Purposes (`PurposePresetsEditor`). Shared `PurposeChipsRow` view in `MileagePurposePresets.swift`.
+- **Location favorites:** `AddressSearchView` shows a Favorites section above Recent. Swipe-leading on a recent = star it; swipe-trailing on a favorite = unstar. Stored in `@AppStorage("mileage_favoriteAddresses")` as JSON via `RecentAddressStore` (which now holds both `recents` and `favorites`).
+- **Mileage presets:** route templates (`MileagePreset`). Chips at the top of the Distance section in `LogTripView` — tapping one pre-fills purpose/notes + start/end, then geocodes both endpoints (`CLGeocoder`) and auto-calculates driving distance; falls back to manual mode if geocoding fails. Managed in Settings → Mileage Presets.
+- **Multi-stop routes:** address mode supports intermediate stops. `TripStop` array in `LogTripView`; "Add Stop" inserts a searchable stop row between From and To. Distance = sum of legs via `calculateDrivingMiles(stops:)`. Stops saved to `MileageTrip.waypoints`; `TripRow` shows a "via …" line. Manual mode stays start/end + typed miles (no waypoints).
 
 ## Expense Tracking — key decisions & current state
 
@@ -137,33 +150,72 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Client link:** optional — expense can be standalone or linked to a `Client`
 - **Multiple receipts:** attach multiple images per expense via `PhotosPicker` (library) or `CameraView` (camera). Stored as `receiptImagesData: [Data]` on the model. Thumbnails shown in a horizontal scroll row in Add/Edit views; each has an × remove button. `ExpenseRow` shows a paperclip icon + count badge.
 - **Legacy migration:** old `receiptImageData: Data?` field is preserved on the model. `ExpenseEditView` migrates it into `receiptImagesData` on first open and clears the old field on save.
-- **Amount field:** displays a `$` prefix label beside the text input in both Add and Edit views. Parsed via `Decimal(string:)` on save.
+- **Amount field:** displays a `$` prefix label beside the text input in both Add and Edit views. Parsed via `Double(string:)` on save.
 - **Tap any entry** to open `ExpenseEditView`
+- **Expense presets:** template chips at the top of `AddExpenseView` (`ExpensePreset`) pre-fill category, amount (when fixed), and notes. Managed in Settings → Expense Presets (`ExpensePresetsView`).
 - **Month summary card** shows total spend + transaction count — hidden when no expenses exist (only `ContentUnavailableView` shown)
 - **Swipe to delete** shows confirmation dialog before deleting
 - `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` must be in Info.plist for camera/photo on real device
 
+## Clients Tab — key decisions & current state
+
+- **Purpose:** central hub for all client relationships — view income received and time worked per client
+- **`ClientsView`** (tab root): list of clients sorted by name. Each cell shows circular avatar (photo or indigo initials), client name, hours tracked + payment count, and a green total earnings badge (time earnings + income entries combined).
+- **`ClientDetailView`**: large centered 100pt circle avatar at top, client name, total earned (green) + hours tracked (indigo) stats. Sections: Invoices, Income, Expenses, Time Entries. `@Query` with `#Predicate` filters all by `persistentModelID` for immediate reactivity.
+- **Invoices section:** list of `InvoiceRow` (invoice #, amount badge orange/green, dates, paid status). `+` opens `CreateInvoiceView`. Tap to open `InvoiceDetailView`. Swipe to delete (warns linked entries become unbilled).
+- **Income section:** list of `IncomeEntry` rows for this client. `+` button in section header opens `LogIncomeForClientView`. Tap to edit via `IncomeEditView`, swipe to delete with confirmation.
+- **Time Entries section:** list of `ClientTimeEntryRow` (project name, hours, earnings badge, date). Tap to edit via `TimeEntryEditView`, swipe to delete with confirmation.
+- **`LogIncomeForClientView`:** income log sheet with client pre-shown (not a picker). Date, amount (`$` prefix), source field + 5 preset chips (Invoice Payment, Retainer, Project Fee, Consulting, Other), notes.
+- **`AddEditClientView`:** photo picker at top (shows live avatar preview, initials fallback). Eagerly inserts a new `Client` into model context on appear for "New Client" flow — Projects section is available immediately so projects can be added before saving. Cancel deletes the in-progress client. Edit mode works identically.
+- **`ClientAvatar`:** shared `internal` struct (circle, photo or indigo initials fallback) used in `ClientsView`, `ClientDetailView`, `AddEditClientView`, and `LogIncomeForClientView`.
+- **Color:** green for income amounts, indigo for time/hours — consistent with app-wide color coding.
+- **Swipe to delete clients** (from `ClientsView`) warns that projects will also be deleted.
+
+## Invoicing — key decisions & current state
+
+- **Three info sources combine into each invoice:**
+  1. **Your business info** — standardized in Settings → Business Information + Invoicing Defaults (`@AppStorage` keys `business_name`, `business_address`, `business_phone`, `business_email`, `business_website`, `business_taxID`, `business_defaultTaxRate`, `business_defaultPaymentTerms`, `business_acceptedPayments`, `business_paymentInstructions`). Rendered as the "from" header + tax ID + payment defaults.
+  2. **Customer info** — from the `Client` (`name`, `companyName`, `billingAddress`, `email`, `phone`), edited in `AddEditClientView` → Billing Details. Rendered as "BILL TO".
+  3. **Per-invoice data** — entered in `CreateInvoiceContent`.
+- **Line items = time entries + manual `InvoiceLineItem`s.** Time-entry billing (select unbilled entries) is unchanged; manual line items add arbitrary products/services with description, quantity, unit price. The PDF merges both into one table via `invoicePDFRows(for:)` → `[InvoicePDFRow]`.
+- **Totals:** `subtotal` → minus `discountAmount` → `discountedSubtotal` → plus `taxAmount` (`taxRate%`) → `total`. New invoices pre-fill tax rate / terms / accepted payments / instructions from the business defaults (editable per invoice).
+- **`CreateInvoiceContent`** pre-fills on first `onAppear` only (guarded by `didPrefill`) so user edits aren't clobbered. `DraftLineItem` is the editing struct; valid drafts (non-empty description + non-zero total) become `InvoiceLineItem`s on save.
+- **PDF** (`makeInvoicePDF`): multi-page, letter size. `BusinessInfo.load(fallbackName:)` reads the business `@AppStorage` keys from `UserDefaults.standard` (falls back to `user_name`). `firstPageMax = 6` rows (taller header), `contPageMax = 10`. Footer (totals + payment + notes + tax ID) renders on the last page only.
+
+## Income Tracking — key decisions & current state
+
+- Income is always tied to a client — logged from `ClientDetailView`, never standalone
+- **`IncomeEntry`** model: `date`, `source`, `amount`, `notes`, `client?` (optional at model level for migration safety, required in UI)
+- **Source presets:** Invoice Payment, Retainer, Project Fee, Consulting, Other — shown as tappable chips that pre-fill the source field (still editable)
+- **`IncomeRow`** and **`IncomeEditView`** live in `Views/IncomeView.swift` as shared components used by `ClientDetailView`
+- **Color:** green throughout
+
 ## Reports — key decisions & current state
 
+- **Access:** `chart.bar` toolbar button on Home screen → sheet with drag indicator (not a tab)
 - **Scope:** currently month-only (current calendar month)
-- **Empty state:** entire report content is hidden when there is no data for the current month — only `ContentUnavailableView` is shown
-- **Month at a glance card:** 2×2 grid — hours + earnings (indigo), miles + reimbursement (blue). Month label is the `Section` header above the card (not overlaid on the card).
+- **Empty state:** entire report content is hidden when there is no data — only `ContentUnavailableView` is shown
+- **Month at a glance card:** 3×2 grid — hours + earnings (indigo), miles + reimbursement (blue), income received + expenses (green/red)
 - **Mileage fuel analysis card:** MPG + gas price (stored in `@AppStorage`) → estimated gallons used → fuel cost vs reimbursement → net. "Edit" button in section header opens `FuelSettingsSheet`
-- **Top clients:** ranked by hours, with proportional bar + earnings. Uses indigo badge matching `TimeEntryRow` style
-- Reports is the convergence point for all four data types — will grow as Expenses and Income are built out
+- **Tax set-aside card:** shown when any gross income > 0. Formula: `grossIncome = timeEarnings + incomeReceived`, `taxableIncome = grossIncome − mileageDeduction − expenses`, set-aside = taxableIncome × (SE rate + income bracket rate). Shows deduction breakdown (mileage mi × rate, expenses). Rates editable in Settings.
+- **Top clients:** ranked by hours, with proportional bar + earnings. Uses indigo badge.
+- **Date range:** segmented picker at top — Week, Month, Quarter, Year. All cards respect the selected range.
 
 ## Settings & Profile — key decisions & current state
 
+- **Titled "Profile"** with a centered avatar header at the top (indigo gradient circle + initials from `user_name`, name, and "<PrimaryUse> · Freelanced" subtitle). `profileInitials` computed in `SettingsView`. Still presented as a sheet from the gear icon.
+- **Business Information** section (name, address, phone, email, website, tax ID/EIN) + **Invoicing Defaults** (payment terms picker, default sales tax %, accepted payments, payment instructions) — all `@AppStorage`, pulled into invoices. `businessField(...)` helper renders the labeled multiline text rows.
+- **Presets & Quick-Fill section** links to Trip Purposes, Mileage Presets, and Expense Presets editors.
 - Accessed via gear icon (top-left toolbar) on every screen — not a tab
 - **Personalization:** user name (used in Home greeting), primary use case picker (resets Home section order to use-case default)
-- **Business:** links to `ClientListView` for managing clients + projects
 - **Rates & Defaults:** IRS mileage rate (live, persisted), default hourly rate
 - **Fuel:** MPG + gas price (shared with Reports fuel analysis card)
 - **Tax Information:** business structure picker, SE tax rate, income bracket rate
 - **Quarterly Tax Due Dates:** all four IRS estimated payment deadlines shown with period labels; next upcoming date highlighted in orange with days-until countdown
-- **Data Export:** "Export All Data (CSV)" button — generates time entries + mileage + expenses as a single CSV, shares via `UIActivityViewController`
+- **Data Export:** "Export All Data (CSV)" button — generates time entries + mileage + expenses as a single CSV, shares via `UIActivityViewController`. Mileage rows export the **full address** (`startAddressForExport`/`endAddressForExport`) plus a **Stops** column (waypoints) — accountants need real addresses, not just place names. Fields are RFC-4180 quote-escaped via `csvField(_:)` so commas in addresses/notes survive.
 - **App:** currency placeholder, app version from bundle
 - Keyboard dismisses on scroll (`scrollDismissesKeyboard(.immediately)`)
+- **Note:** Clients & Projects management was removed from Settings — it now lives entirely in the Clients tab
 
 **`@AppStorage` keys used in Settings:**
 - `user_name` — first name, shown in Home greeting
@@ -189,9 +241,21 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 
 ---
 
+## Recently Deleted (soft-delete) — key decisions & current state
+
+The six user-facing record types — **TimeEntry, MileageTrip, Expense, IncomeEntry, Invoice, Client** — use **soft-delete**: deleting sets `deletedDate = .now` instead of removing the row. Items live in a 30-day "Recently Deleted" area, can be restored, and are permanently purged after 30 days.
+
+- **`SoftDeletable` protocol** (`Models/SoftDeletable.swift`): `var deletedDate: Date? { get set }` + `trashDaysRemaining` computed helper (0...30). All six in-scope models conform and declare `var deletedDate: Date? = nil` (CloudKit-safe optional with default).
+- **Every `@Query` for these types filters `deletedDate == nil`** so trashed items vanish from all normal lists, pickers, reports, exports, and aggregates. Predicate-`init` queries (ClientDetailView, CreateInvoiceContent, the Month-detail views) AND `&& deletedDate == nil` into their existing predicate.
+- **Relationship-array totals must also filter** — `ClientCell` computes earnings/hours from `client.timeEntries`/`incomeEntries` directly, so those sites use `.filter { $0.deletedDate == nil }`. (Invoice line items in `InvoiceDetailView`/PDF intentionally do NOT filter — an issued invoice is a finalized snapshot.)
+- **Delete sites set `deletedDate = .now`** instead of `modelContext.delete(...)`. Exceptions that remain hard-delete: `TimePreset` (PresetsView), `Project` (AddEditClientView inline), and the eager-insert cancel path in AddEditClientView (`modelContext.delete(client)` discards an unsaved client).
+- **`RecentlyDeletedView`** (`Settings/RecentlyDeletedView.swift`): six `@Query`s filtered to `deletedDate != nil`, merged into a unified sorted list. Swipe leading = Restore (`deletedDate = nil`), swipe trailing = Delete permanently (`modelContext.delete`). "Delete All" toolbar button. Shows "Nd left" per row (orange when ≤3 days). Reached via Settings → Data Management → Recently Deleted.
+- **Purge:** `BusinessTrackerApp.purgeExpiredTrash()` runs on launch (`.task`) and on foreground. Fetches each type where `deletedDate != nil`, hard-deletes any older than 30 days. For a Client this fires the real cascade (projects + invoices) at purge time — matching the original hard-delete semantics.
+- **Client soft-delete does NOT cascade during the 30-day window** — only the client's own `deletedDate` is set; its projects/invoices/entries are untouched until permanent purge. Restore brings the client back fully intact (better than the old hard-delete, which orphaned entries via nullify). Trade-off: a soft-deleted client's child records (time/income/expenses) remain visible in global lists during the window, consistent with the old nullify behavior where they survived client deletion.
+
 ## Delete confirmation pattern
 
-All swipe-to-delete actions across the app show a `confirmationDialog` before executing. Pattern:
+All swipe-to-delete actions across the app show a `confirmationDialog` before executing. For the six soft-deleted types the message reads "You can restore this from Recently Deleted for 30 days." Pattern:
 ```swift
 @State private var pendingDelete: ([ModelType], IndexSet)?
 
@@ -206,7 +270,7 @@ All swipe-to-delete actions across the app show a `confirmationDialog` before ex
 } message: { Text("This cannot be undone.") }
 ```
 
-Applied to: `TimeTrackingView`, `MileageView`, `MileageMonthDetailView`, `ExpensesView`, `ExpenseMonthDetailView`, `ClientListView` (client deletion message also warns projects will be deleted).
+Applied to: `TimeTrackingView`, `MileageView`, `MileageMonthDetailView`, `ExpensesView`, `ExpenseMonthDetailView`, `ClientsView` (client deletion warns projects will be deleted), `ClientDetailView` (separate dialogs for income entries, time entries, expenses, and invoices).
 
 ---
 
@@ -214,7 +278,7 @@ Applied to: `TimeTrackingView`, `MileageView`, `MileageMonthDetailView`, `Expens
 
 - **Title row:** entity name (bold semibold) + colored amount/hours badge (capsule pill) on the right
 - **Detail row:** small icon column (10–12pt) + label text + Spacer + prominent value (`.subheadline.weight(.medium)`)
-- **Color coding:** Time = indigo, Mileage = blue, Expenses = red, Income = TBD
+- **Color coding:** Time = indigo, Mileage = blue, Expenses = red, Income = green, Clients = indigo/green
 - Notes always last, `.caption`, `.tertiary`, `lineLimit(1)`
 - `.padding(.vertical, 4)` on all rows
 - **History list rows** (Mileage + Expenses): month name as `.headline` primary text, colored badge on the right, secondary info (count + amount) below — not full summary cards
@@ -229,13 +293,19 @@ BusinessTracker/
 ├── BusinessTracker.entitlements     (iCloud + CloudKit entitlements)
 ├── ContentView.swift
 ├── Models/
-│   ├── Client.swift
+│   ├── Client.swift                 (name, photoData, all relationships including invoices)
 │   ├── Project.swift
-│   ├── TimeEntry.swift
+│   ├── TimeEntry.swift              (includes invoice? relationship)
 │   ├── TimePreset.swift
 │   ├── MileageTrip.swift
 │   ├── Expense.swift
-│   └── IncomeEntry.swift
+│   ├── IncomeEntry.swift            (date, source, amount, notes, client?)
+│   ├── Invoice.swift                (number, dates, isPaid, discount, taxRate, paymentTerms/instructions/accepted, poNumber, client?, timeEntries, lineItems; subtotal/discountedSubtotal/taxAmount/total)
+│   ├── InvoiceLineItem.swift        (manual line: itemDescription, quantity, unitPrice, sortOrder, invoice? — lineTotal computed)
+│   ├── MileagePreset.swift          (saved route template: name, start, end, purpose, notes, sortOrder — no relationships)
+│   ├── ExpensePreset.swift          (saved expense template: name, amount: Double?, category, notes, sortOrder — no relationships)
+│   ├── SoftDeletable.swift          (protocol: deletedDate + trashDaysRemaining — TimeEntry/MileageTrip/Expense/IncomeEntry/Invoice/Client conform)
+│   └── TimerActivityAttributes.swift (ActivityAttributes for Live Activity — MUST stay in sync with FreelancedLiveActivity.swift copy)
 ├── Home/
 │   └── HomeView.swift               (HomeSection enum, QuickAction enum, HomeSectionCard, HomeLayoutEditor)
 ├── TimeTracking/
@@ -244,40 +314,51 @@ BusinessTracker/
 │   ├── TimerSheet.swift
 │   ├── LogTimeView.swift
 │   ├── TimeEntryEditView.swift
-│   ├── ClientListView.swift
-│   ├── AddEditClientView.swift
+│   ├── ClientListView.swift         (ClientsView tab, ClientCell, ClientAvatar, ClientDetailView, ClientTimeEntryRow, LogIncomeForClientView)
+│   ├── AddEditClientView.swift      (photo picker, eager insert for new clients, projects section always visible)
 │   ├── AddEditProjectView.swift
 │   ├── PresetsView.swift
-│   └── (AddEditPresetView is inside PresetsView.swift)
+│   ├── (AddEditPresetView is inside PresetsView.swift)
+│   └── InvoiceView.swift            (InvoiceRow, CreateInvoiceView/CreateInvoiceContent, InvoiceQuickActionSheet, InvoiceDetailView, MarkPaidSheet, InvoiceFirstPageLayout, InvoiceContinuationPageLayout, makeInvoicePDF())
 ├── Mileage/
-│   ├── AddressSearcher.swift        (AddressSearcher, LocationManager, LocationResult, shortAddress, calculateDrivingMiles)
-│   ├── AddressSearchView.swift      (current location row + MKLocalSearchCompletion results)
-│   ├── LogTripView.swift
+│   ├── AddressSearcher.swift        (AddressSearcher, LocationManager, LocationResult, shortAddress, calculateDrivingMiles single + multi-leg)
+│   ├── AddressSearchView.swift      (current location row + Favorites + Recent + MKLocalSearchCompletion results; star to favorite)
+│   ├── RecentAddressStore.swift     (recents + favorites, both JSON in UserDefaults)
+│   ├── MileagePurposePresets.swift  (purpose chip store + PurposeChipsRow + PurposePresetsEditor)
+│   ├── MileagePresetsView.swift     (MileagePresetsView + AddEditMileagePresetView)
+│   ├── LogTripView.swift            (multi-stop address mode: TripStop, Add Stop; mileage preset chips; purpose chips)
 │   ├── MileageTripEditView.swift    (Manual / Address mode toggle, same as LogTripView)
-│   ├── MileageView.swift            (also contains MileageSummaryCard, TripRow)
+│   ├── MileageView.swift            (also contains MileageSummaryCard, TripRow — shows "via …" waypoints)
 │   ├── MileageHistoryView.swift
 │   └── MileageMonthDetailView.swift
 ├── Expenses/
 │   ├── ExpensesView.swift           (also contains ExpenseSummaryCard, ExpenseRow)
-│   ├── AddExpenseView.swift
+│   ├── AddExpenseView.swift         (expense preset chips pre-fill category/amount/notes)
 │   ├── ExpenseEditView.swift
+│   ├── ExpensePresetsView.swift     (ExpensePresetsView + AddEditExpensePresetView)
 │   ├── ExpenseHistoryView.swift
 │   ├── ExpenseMonthDetailView.swift
 │   └── CameraView.swift             (also contains ReceiptPreviewSheet)
 ├── Settings/
-│   └── SettingsView.swift           (also contains SettingsIcon helper; has Personalization, Quarterly Tax Dates, Data Export sections)
+│   ├── SettingsView.swift           (Profile header, Personalization, Rates & Defaults, Fuel, Tax Information, Quarterly Tax Dates + reminders toggle, Presets & Quick-Fill, Data Export, Recently Deleted, App — titled "Profile")
+│   ├── TaxReminders.swift           (local-notification scheduler for quarterly deadlines — opt-in, rescheduled on launch)
+│   └── RecentlyDeletedView.swift    (30-day trash — restore / permanent delete across all six soft-deleted types)
+├── Shortcuts/
+│   └── AppShortcuts.swift           (Siri/Shortcuts App Intents: StartTimer/LogTime/LogTrip/LogExpense + FreelancedShortcuts provider)
 ├── Onboarding/
 │   └── OnboardingView.swift         (5 pages: welcome, about you, location, notifications, ready)
 └── Views/
-    ├── IncomeView.swift              (placeholder — no tab until feature is built)
-    ├── ReportsView.swift             (in progress)
+    ├── IncomeView.swift              (IncomeRow + IncomeEditView — shared components used by ClientDetailView)
+    ├── ReportsView.swift             (3×2 glance card, fuel analysis, tax set-aside, top clients — opened as sheet from Home)
     └── PlaceholderView.swift
 
 FreelancedWidget/                    (WidgetKit extension target)
-├── FreelancedWidgetBundle.swift     (@main — registers FreelancedMediumWidget only; small built but disabled)
+├── FreelancedWidgetBundle.swift     (@main — registers FreelancedSmallWidget, FreelancedMediumWidget, FreelancedTaxWidget, FreelancedLiveActivity)
 ├── FreelancedWidget.swift           (providers, entry views, widget definitions, previews)
+├── FreelancedTaxWidget.swift        (read-only Quarterly Tax Due Dates — StaticConfiguration, daily refresh; QuarterlyTaxDates logic duplicated from SettingsView)
+├── FreelancedLiveActivity.swift     (TimerActivityAttributes copy, FreelancedLiveActivity Widget, TimerLockScreenView)
 ├── AppIntent.swift                  (WidgetQuickAction AppEnum, SingleActionConfiguration, QuadActionConfiguration)
-├── FreelancedWidgetControl.swift    (Xcode-generated Control widget stub — unused, not in bundle)
+├── FreelancedWidgetControl.swift    (Xcode-generated Control widget stub — unused, not in bundle; TimerControlIntent renamed to avoid conflict with AppIntent.swift)
 └── Assets.xcassets/
 ```
 
@@ -285,15 +366,13 @@ FreelancedWidget/                    (WidgetKit extension target)
 
 ## What's left to build
 
-**Near term (logical next steps):**
-- **Income tab** — `IncomeEntry` model exists, needs full UI: log income, list view, edit view, month summary card
-- **Reports expansion** — add expenses section, tax set-aside estimate (uses Settings tax rates), date range picker (week / month / quarter / year)
-- **iCloud sync validation** — confirm sync works correctly on real device; watch for Decimal type issues
-- **Small widget config bug** — `FreelancedSmallWidget` is built but disabled; `AppIntentConfiguration` with a single `AppEnum` parameter doesn't reflect user configuration changes. Investigate whether the issue is serialization, timeline invalidation, or an iOS bug.
+**Remaining / future:**
+- **Lock screen widgets** — deferred until Firebase Blaze (or equivalent server) is justified by MRR. Full design in the Widgets section.
+- **Package Tracking** — future, needs carrier API integration.
+- **Pro tier (paid)** — future, StoreKit.
+- **iPad / macOS** — future (currently iPhone-only layout).
 
-**Polish / UX:**
-- Verify Home screen primary use picker correctly reorders sections (Settings onChange triggers correctly)
-- Home screen quick actions — consider adding more actions as features are built (Log Income, etc.)
+_(Shipped: Jack's full feedback batch — Reports PDF export, mileage deduction card, trip purpose presets, location favorites, multi-stop routes, mileage/expense presets, prominent timer-sheet presets button, Quarterly Tax widget, Settings→Profile redesign — plus Recently Deleted, Siri & Shortcuts, tax deadline reminders, and "Create Invoice" as a default Home quick action. See feature sections.)_
 
 ---
 
@@ -310,38 +389,85 @@ FreelancedWidget/                    (WidgetKit extension target)
 
 ---
 
-## Widgets — current state & notes
+## Widgets & Live Activities — current state & notes
 
 - **Extension target:** `FreelancedWidget` (bundle: `com.garbenTechnologies.BusinessTracker.FreelancedWidget`)
-- **URL scheme:** `freelanced://` registered in `BusinessTracker/Info.plist`. Deep link format: `freelanced://startTimer`, `freelanced://logTime`, `freelanced://logTrip`, `freelanced://addExpense`
+- **URL scheme:** `freelanced://` registered in `BusinessTracker/Info.plist`. Deep link format: `freelanced://startTimer`, `freelanced://logTime`, `freelanced://logTrip`, `freelanced://addExpense`, `freelanced://createInvoice`
 - **Deep link routing:** `BusinessTrackerApp.handleWidgetDeepLink(_:)` sets `timerState.pendingWidgetAction`; `ContentView` observes it with `onChange` and opens the right sheet
-- **Reload on foreground:** `BusinessTrackerApp` calls `WidgetCenter.shared.reloadAllTimelines()` on `UIApplication.willEnterForegroundNotification`
-- **`WidgetQuickAction`** — `AppEnum` in `AppIntent.swift`. Has `typeIdentifier = "com.garbenTechnologies.BusinessTracker.WidgetQuickAction"` for stable serialization. Mirrors `QuickAction` from the main app (kept separate — widget extension can't import main app module).
+- **Foreground sync:** `BusinessTrackerApp` calls `timerState.syncFromSharedStore()` then `WidgetCenter.shared.reloadAllTimelines()` on `UIApplication.willEnterForegroundNotification`
+- **`WidgetQuickAction`** — `AppEnum` in `AppIntent.swift`. Cases: `.startTimer`, `.logTime`, `.logTrip`, `.addExpense`, `.createInvoice`. Has `typeIdentifier = "com.garbenTechnologies.BusinessTracker.WidgetQuickAction"` for stable serialization. Mirrors `QuickAction` from the main app (kept separate — widget extension can't import main app module).
+- **Config policy:** both providers use `policy: .never` — `AppIntentConfiguration` widgets reload automatically on config change; any other policy fights with WidgetKit's intent-driven reload and causes stale UI.
+- **Duplicate actions:** `QuadActionWidgetView` uses `ForEach(Array(actions.enumerated()), id: \.offset)` — using `id: \.rawValue` collapses duplicate actions into one cell.
 
 **Medium widget (active):**
 - Kind: `FreelancedMediumWidget`
 - Config: `QuadActionConfiguration` — 4 individually selectable `WidgetQuickAction` parameters
-- View: 2×2 `LazyVGrid` of `WidgetActionCell` (circle icon + label, color-tinted card matching in-app `QuickActionCell` style)
-- Outer padding: `4`
+- View: 2×2 `LazyVGrid` of `WidgetActionCell` (circle icon + label, color-tinted card)
 
-**Small widget (built, disabled):**
-- Kind: `FreelancedSmallWidget` — exists in `FreelancedWidget.swift` but not registered in the bundle
+**Small widget (active):**
+- Kind: `FreelancedSmallWidget`
 - Config: `SingleActionConfiguration` — one `WidgetQuickAction` parameter
-- Known issue: configuration changes don't update the rendered widget despite `typeIdentifier`, `policy: .after(24h)`, and foreground reload. Needs further investigation before re-enabling.
-- To re-enable: add `FreelancedSmallWidget()` back to `FreelancedWidgetBundle.body`
+- Family: `.systemSmall` only (home screen)
+- All actions deep-link into the app via `.widgetURL(action.deepLink)`
+- Previously had a config-persistence bug with `policy: .after(24h)` — fixed by switching to `policy: .never`
 
-## Planned platform extensions (not started)
+**Quarterly Tax Due Dates widget (active, read-only):**
+- Kind: `FreelancedTaxWidget` in `FreelancedWidget/FreelancedTaxWidget.swift`
+- `StaticConfiguration` (no user config), families `.systemSmall` + `.systemMedium`
+- Shows the next due date prominently (small) plus all four quarters (medium), next one highlighted orange with a day countdown
+- `QuarterlyTaxDates.upcoming()` duplicates the date logic from `SettingsView` (widget can't import the app). Timeline refreshes at next midnight so "next due" + countdown stay current. No App Group / no deep link.
 
-- **Live Activities** (ActivityKit) — show active timer elapsed time on Dynamic Island / lock screen.
-- **Lock screen widgets** (WidgetKit) — quick-tap buttons for starting timer or logging a trip.
-- **Shortcuts / Siri** (App Intents) — `AppIntent` conformances for "start timer", "stop timer", "log a trip", "log an expense".
+**Live Activity (active):**
+- Kind: `FreelancedLiveActivity` in `FreelancedWidget/FreelancedLiveActivity.swift`
+- Attributes: `TimerActivityAttributes` (`clientName`, `projectName`); `ContentState` (`startDate: Date`)
+- Dynamic Island: compact (indigo timer icon + `Text(timerInterval:)` counter), expanded (client/project + elapsed + tap hint), minimal (icon)
+- Lock screen: `TimerLockScreenView` — icon, client/project stack, live counter
+- Started by `TimerState.startLiveActivity()` in the **main app process only** — widget extensions cannot call `Activity.request()`
+- Ended by `TimerState.endLiveActivity()` on timer stop
+- `NSSupportsLiveActivities` + `NSSupportsLiveActivitiesFrequentUpdates` must be `true` in `BusinessTracker/Info.plist`
+
+**Widget timer start flow:**
+- Tapping any widget action calls `.widgetURL(action.deepLink)` → app opens → `handleWidgetDeepLink(_:)` routes to correct sheet
+- The "Start Timer" action on the home screen small widget follows the same deep-link path (opens app, timer sheet appears)
+- `TimerState.syncFromSharedStore()` is called on every foreground — reserved for future background-start scenarios
+
+**Lock screen widgets — deferred:**
+- Was fully built (`.accessoryCircular`, `.accessoryRectangular`, `.accessoryInline` families + `StartTimerIntent` with `openAppWhenRun: false` writing to App Group UserDefaults)
+- Core problem: widget extensions cannot call `Activity.request()` — the Live Activity only appeared after the user opened the app
+- Attempted fix: ActivityKit push-to-start via Firebase Cloud Function — rejected because Firebase Blaze plan required
+- Decision: removed lock screen families and `StartTimerIntent`; revisit when MRR justifies the server cost
+- Re-implementation path when ready: push-to-start token listener in main app → store in App Group UserDefaults → widget intent POSTs token + startDate to server → server sends APNs push with `apns-push-type: liveactivity` and topic `com.garbenTechnologies.BusinessTracker.push-type.liveactivity`
+
+## Siri & Shortcuts — current state & notes
+
+- **`Shortcuts/AppShortcuts.swift`** (main app target): `StartTimerShortcut`, `LogTimeShortcut`, `LogTripShortcut`, `LogExpenseShortcut` — all `AppIntent` with `openAppWhenRun = true`.
+- **Routing:** each intent writes a raw action string to App Group UserDefaults key `pendingShortcutAction`. `BusinessTrackerApp.consumePendingShortcutAction()` reads it on `.task` (launch) and on foreground, then calls `routeAction(_:)` → sets `timerState.pendingWidgetAction` → ContentView opens the matching sheet. Same routing target as widget deep links (`routeAction` is shared by both).
+- **`FreelancedShortcuts: AppShortcutsProvider`** auto-registers the four shortcuts (no user setup) with Siri phrases — phrases must include `\(.applicationName)`.
+- Uses the existing App Group (`group.com.garbenTechnologies.BusinessTracker`) and the existing `WidgetAction` enum routing — no new infrastructure.
+
+## Tax deadline reminders — current state & notes
+
+- **`Settings/TaxReminders.swift`**: schedules local `UNCalendarNotificationTrigger`s a week before and the day before each quarterly IRS deadline (9am local). Opt-in via `@AppStorage("tax_remindersEnabled")`, toggle in the Quarterly Tax Dates section.
+- `handleToggle(enabled:)` requests authorization when turning on; `reschedule()` clears prior `tax-deadline-*` requests and re-adds upcoming ones. Called on app launch (`.task`) so deadlines roll forward each cycle.
+- No push entitlement / no server — purely local notifications. `TaxReminders.dueDates()` duplicates the quarterly-date logic (same as SettingsView + the tax widget).
+
+## Planned platform extensions
+
+- **Lock screen widgets** — deferred (see Widgets section)
 
 ---
 
 ## Known patterns / gotchas
 
+- **CloudKit model rules (all must be followed or CloudKit silently falls back to local-only):**
+  1. Every stored attribute needs a default on the *property declaration* — `var name: String = ""` not just `var name: String` (CloudKit reads metadata, not `init`)
+  2. All to-many relationships must be `[T]? = nil`, not `[T] = []` — access sites use `(x ?? [])`
+  3. Every relationship must have an inverse defined with `@Relationship(inverse:)`
+  4. Use `Double` not `Decimal` for monetary values — CloudKit has no native Decimal type
+  5. `remote-notification` must be in `UIBackgroundModes` in Info.plist — CloudKit uses silent push to trigger sync
+  6. Schema must be manually deployed from Development → Production in CloudKit Console after first device run
 - `onChange(of: selectedClient)` only clears `selectedProject` if the project doesn't belong to the new client — prevents presets from requiring two taps
-- SwiftData filtered `@Query` in detail views uses custom `init` with `#Predicate`
+- SwiftData filtered `@Query` in detail views uses custom `init` with `#Predicate` — `ClientDetailView` filters time entries and income entries by `persistentModelID` for immediate reactivity
 - `TimerState.stop()` clears client/project — always capture them into locals before calling it
 - `Text +` concatenation is deprecated in iOS 26 — use string interpolation instead
 - `Decimal(string:)` used for amount parsing from text fields — handles currency input safely. Strip any `$` prefix before passing if the field displays one.
@@ -360,3 +486,14 @@ FreelancedWidget/                    (WidgetKit extension target)
 - `NavigationLink` label VStack in a List needs `.frame(maxWidth: .infinity, alignment: .leading)` to fill the row width — without it the row may render with content top-aligned instead of vertically centered
 - **Home reorder:** `ForEach { Section { } }.onMove` does NOT move sections as units — it attaches drag handles to individual rows inside sections. To reorder sections, each section must be a single `List` row. `HomeView` uses this pattern via `HomeSectionCard`.
 - **CloudKit ModelContainer:** constructing `ModelContainer` with a manual `Schema` object can fail if the on-disk store was created by the `.modelContainer(for:)` scene modifier. Use `ModelConfiguration(schema:cloudKitDatabase:)` inside a `do/catch` with a local fallback using `ModelConfiguration(schema:cloudKitDatabase:.none)`.
+- **`AddEditClientView` eager insert:** for new clients, the `Client` object is inserted into the model context immediately on `onAppear` so the Projects section is available before saving. If the user cancels, the client is deleted. This means a cancelled "New Client" sheet briefly creates and then removes a record — expected behavior.
+- **Do not use relationship arrays for reactive UI in detail views** — `client.timeEntries` and `client.incomeEntries` accessed directly on a passed-in model object don't update the view promptly when entries are added elsewhere. Always use `@Query` with `#Predicate { $0.client?.persistentModelID == id }` for live-updating lists.
+- **`ImageRenderer` PDF coordinate system** — `ImageRenderer.render { size, draw in }` already handles the Y-axis flip internally. Do NOT apply `translateBy`/`scaleBy` before calling `draw(ctx)` — a second flip produces upside-down output. Set page `mediaBox` to `CGRect(origin: .zero, size: size)` and call `draw(ctx)` directly. For a fixed letter-size page (612×792), set `renderer.proposedSize = ProposedViewSize(width: 612, height: 792)` and constrain the layout view with `.frame(width: 612, height: 792)`.
+- **Currency text fields use string-based input with 2-decimal hard limit** — all monetary TextFields use `text: $someText` (not `value: $someDouble, format: .currency`) with an `onChange` filter: strip non-numeric chars except `.`, then cap fractional digits at 2 using `String.firstIndex(of: ".")`. This prevents rounding artifacts on every keystroke. Applied to: hourly rate fields in `LogTimeView`, `TimeEntryEditView`, `AddEditProjectView`, `PresetsView`; amount fields in `AddExpenseView`, `ExpenseEditView`, `IncomeView`, `ClientListView` (LogIncomeForClientView), `InvoiceView`.
+- **`AppIntentConfiguration` widgets must use `policy: .never`** — any other reload policy (e.g. `.after(24h)`) conflicts with WidgetKit's intent-driven reload and causes the widget to ignore configuration changes. WidgetKit reloads the timeline automatically when the user changes an `AppIntentConfiguration`.
+- **`ForEach` with `AppEnum` — use `id: \.offset`, not `id: \.rawValue`** — if the user picks the same action for multiple slots, `id: \.rawValue` collapses duplicates into a single cell. Wrap with `Array(actions.enumerated())` and use `id: \.offset`.
+- **Widget extensions cannot start Live Activities** — `Activity<T>.request()` must be called from the main app process. Widget `AppIntent.perform()` can write to shared App Group UserDefaults; the main app calls `TimerState.syncFromSharedStore()` on foreground which reads that value and starts the Live Activity. There is no way to show the Live Activity immediately on widget tap without a server-side ActivityKit push-to-start (APNs `apns-push-type: liveactivity`).
+- **`TimerActivityAttributes` is duplicated across two targets** — the main app (`BusinessTracker/Models/TimerActivityAttributes.swift`) and widget extension (`FreelancedWidget/FreelancedLiveActivity.swift`) are separate Swift modules and cannot share the type. The struct must be kept identical in both files; a comment in each file calls this out.
+- **Multi-page invoice PDF uses multiple `ImageRenderer` renders into one `CGContext`** — call `ctx.beginPDFPage(nil)` / `draw(ctx)` / `ctx.endPDFPage()` per page, then `ctx.closePDF()`. Each page is a separate `ImageRenderer` with its own SwiftUI layout (`InvoiceFirstPageLayout` max 7 items, `InvoiceContinuationPageLayout` max 10). Do not try to render all pages in a single `ImageRenderer`.
+- **`CreateInvoiceView` wraps `CreateInvoiceContent`** — `CreateInvoiceContent` is a private struct holding all form state and the body. `CreateInvoiceView(client:)` just wraps it in a `NavigationStack`. `InvoiceQuickActionSheet` shows a client picker that pushes to `CreateInvoiceContent` directly, reusing the same form without duplication.
+- **Soft-delete: any NEW `@Query` for TimeEntry/MileageTrip/Expense/IncomeEntry/Invoice/Client MUST filter `deletedDate == nil`** — there is no global query scope in SwiftData, so a forgotten filter makes trashed items reappear. Simple form: `@Query(filter: #Predicate<T> { $0.deletedDate == nil }, sort: ...)`. Predicate-`init` form: AND `&& $0.deletedDate == nil` into the predicate. Any code summing a **relationship array** (e.g. `client.timeEntries`) must `.filter { $0.deletedDate == nil }` too. To trash a record set `deletedDate = .now` (never `modelContext.delete`, except for the hard-delete exceptions: TimePreset, Project, and the AddEditClientView eager-insert cancel). See the Recently Deleted section.

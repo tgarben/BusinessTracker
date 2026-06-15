@@ -5,7 +5,7 @@ struct PresetsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \TimePreset.sortOrder) private var presets: [TimePreset]
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
 
     @State private var showAddPreset = false
     @State private var presetToEdit: TimePreset?
@@ -141,7 +141,7 @@ private struct PresetListRow: View {
 struct AddEditPresetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
     @Query(sort: \TimePreset.sortOrder) private var existingPresets: [TimePreset]
 
     var preset: TimePreset? // nil = add, non-nil = edit
@@ -150,16 +150,17 @@ struct AddEditPresetView: View {
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
     @State private var useRateOverride = false
-    @State private var rateOverride: Decimal = 0
+    @State private var rateOverride: Double = 0
+    @State private var rateOverrideText: String = ""
     @State private var notesTemplate: String = ""
 
     private var isEditing: Bool { preset != nil }
 
     private var availableProjects: [Project] {
-        selectedClient?.projects.sorted { $0.name < $1.name } ?? []
+        (selectedClient?.projects ?? []).sorted { $0.name < $1.name }
     }
 
-    private var projectRate: Decimal { selectedProject?.hourlyRate ?? 0 }
+    private var projectRate: Double { selectedProject?.hourlyRate ?? 0 }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
@@ -197,9 +198,21 @@ struct AddEditPresetView: View {
 
                     if useRateOverride {
                         LabeledContent("Rate") {
-                            TextField("0.00", value: $rateOverride, format: .currency(code: "USD"))
-                                .multilineTextAlignment(.trailing)
-                                .keyboardType(.decimalPad)
+                            HStack(spacing: 2) {
+                                Text("$").foregroundStyle(.secondary)
+                                TextField("0.00", text: $rateOverrideText)
+                                    .multilineTextAlignment(.trailing)
+                                    .keyboardType(.decimalPad)
+                                    .onChange(of: rateOverrideText) { _, new in
+                                        var s = new.filter { $0.isNumber || $0 == "." }
+                                        if let dot = s.firstIndex(of: ".") {
+                                            let frac = String(s[s.index(after: dot)...].filter(\.isNumber).prefix(2))
+                                            s = String(s[..<dot]) + "." + frac
+                                        }
+                                        if s != new { rateOverrideText = s }
+                                        rateOverride = Double(s) ?? 0
+                                    }
+                            }
                         }
                     } else if projectRate > 0 {
                         LabeledContent("Rate from project") {
@@ -247,14 +260,15 @@ struct AddEditPresetView: View {
         selectedProject  = preset.project
         notesTemplate    = preset.notesTemplate
         if let override = preset.hourlyRateOverride {
-            useRateOverride = true
-            rateOverride    = override
+            useRateOverride    = true
+            rateOverride       = override
+            rateOverrideText   = override > 0 ? String(format: "%.2f", override) : ""
         }
     }
 
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        let override: Decimal? = useRateOverride ? rateOverride : nil
+        let override: Double? = useRateOverride ? rateOverride : nil
 
         if let preset {
             preset.name                = trimmed

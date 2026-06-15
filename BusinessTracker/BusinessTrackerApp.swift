@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 import WidgetKit
 
 @main
@@ -16,6 +16,10 @@ struct BusinessTrackerApp: App {
             TimePreset.self,
             MileageTrip.self,
             IncomeEntry.self,
+            Invoice.self,
+            InvoiceLineItem.self,
+            MileagePreset.self,
+            ExpensePreset.self,
         ])
         do {
             let config = ModelConfiguration(
@@ -24,7 +28,7 @@ struct BusinessTrackerApp: App {
             )
             return try ModelContainer(for: schema, configurations: [config])
         } catch {
-            // CloudKit unavailable (not signed in, simulator, etc.) — fall back to local store
+            print("⚠️ CloudKit ModelContainer failed, falling back to local store: \(error)")
             return try! ModelContainer(for: schema, configurations: [
                 ModelConfiguration(schema: schema, cloudKitDatabase: .none)
             ])
@@ -37,8 +41,16 @@ struct BusinessTrackerApp: App {
                 ContentView()
                     .environment(timerState)
                     .onOpenURL { url in handleWidgetDeepLink(url) }
+                    .task {
+                        Self.purgeExpiredTrash()
+                        consumePendingShortcutAction()
+                        await TaxReminders.reschedule()
+                    }
                     .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                        timerState.syncFromSharedStore()
+                        consumePendingShortcutAction()
                         WidgetCenter.shared.reloadAllTimelines()
+                        Self.purgeExpiredTrash()
                     }
             } else {
                 OnboardingView()
@@ -47,13 +59,51 @@ struct BusinessTrackerApp: App {
         .modelContainer(Self.sharedModelContainer)
     }
 
+    /// Permanently deletes any soft-deleted records whose 30-day Recently Deleted
+    /// window has elapsed. Runs on launch and on foreground. For a Client, the real
+    /// `modelContext.delete` here fires the normal cascade (projects + invoices).
+    @MainActor
+    static func purgeExpiredTrash() {
+        let context = ModelContext(sharedModelContainer)
+        let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
+
+        func purge<T: PersistentModel & SoftDeletable>(_ fetch: FetchDescriptor<T>) {
+            guard let items = try? context.fetch(fetch) else { return }
+            for item in items where (item.deletedDate ?? .now) < cutoff {
+                context.delete(item)
+            }
+        }
+
+        purge(FetchDescriptor<TimeEntry>(predicate: #Predicate { $0.deletedDate != nil }))
+        purge(FetchDescriptor<MileageTrip>(predicate: #Predicate { $0.deletedDate != nil }))
+        purge(FetchDescriptor<Expense>(predicate: #Predicate { $0.deletedDate != nil }))
+        purge(FetchDescriptor<IncomeEntry>(predicate: #Predicate { $0.deletedDate != nil }))
+        purge(FetchDescriptor<Invoice>(predicate: #Predicate { $0.deletedDate != nil }))
+        purge(FetchDescriptor<Client>(predicate: #Predicate { $0.deletedDate != nil }))
+
+        try? context.save()
+    }
+
     private func handleWidgetDeepLink(_ url: URL) {
         guard url.scheme == "freelanced" else { return }
-        switch url.host {
-        case "startTimer":  timerState.pendingWidgetAction = .startTimer
-        case "logTime":     timerState.pendingWidgetAction = .logTime
-        case "logTrip":     timerState.pendingWidgetAction = .logTrip
-        case "addExpense":  timerState.pendingWidgetAction = .addExpense
+        routeAction(url.host)
+    }
+
+    /// Reads an action queued by a Siri/Shortcuts App Intent and routes it to the right sheet.
+    private func consumePendingShortcutAction() {
+        guard let defaults = UserDefaults(suiteName: "group.com.garbenTechnologies.BusinessTracker"),
+              let raw = defaults.string(forKey: "pendingShortcutAction") else { return }
+        defaults.removeObject(forKey: "pendingShortcutAction")
+        routeAction(raw)
+    }
+
+    private func routeAction(_ raw: String?) {
+        switch raw {
+        case "startTimer":    timerState.pendingWidgetAction = .startTimer
+        case "logTime":       timerState.pendingWidgetAction = .logTime
+        case "logTrip":       timerState.pendingWidgetAction = .logTrip
+        case "addExpense":    timerState.pendingWidgetAction = .addExpense
+        case "createInvoice": timerState.pendingWidgetAction = .createInvoice
         default: break
         }
     }

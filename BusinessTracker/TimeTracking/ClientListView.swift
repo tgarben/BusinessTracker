@@ -9,7 +9,7 @@ private let incomeSourcePresets = [
 // MARK: - Clients Tab
 
 struct ClientsView: View {
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
     @Environment(\.modelContext) private var modelContext
 
     @State private var showAddClient = false
@@ -59,13 +59,13 @@ struct ClientsView: View {
             ), titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let offsets = pendingDelete {
-                        for index in offsets { modelContext.delete(clients[index]) }
+                        for index in offsets { clients[index].deletedDate = .now }
                     }
                     pendingDelete = nil
                 }
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: {
-                Text("This will also delete all projects under this client. This cannot be undone.")
+                Text("The client is moved to Recently Deleted. Restore within 30 days to recover it and its projects.")
             }
         }
     }
@@ -76,14 +76,14 @@ struct ClientsView: View {
 private struct ClientCell: View {
     let client: Client
 
-    private var totalEarnings: Decimal {
-        let time   = client.timeEntries.reduce(Decimal(0)) { $0 + $1.earnings }
-        let income = client.incomeEntries.reduce(Decimal(0)) { $0 + $1.amount }
+    private var totalEarnings: Double {
+        let time   = (client.timeEntries ?? []).filter { $0.deletedDate == nil }.reduce(0.0) { $0 + $1.earnings }
+        let income = (client.incomeEntries ?? []).filter { $0.deletedDate == nil }.reduce(0.0) { $0 + $1.amount }
         return time + income
     }
 
     private var totalHours: Double {
-        client.timeEntries.reduce(0) { $0 + $1.hours }
+        (client.timeEntries ?? []).filter { $0.deletedDate == nil }.reduce(0) { $0 + $1.hours }
     }
 
     var body: some View {
@@ -92,7 +92,7 @@ private struct ClientCell: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(client.name).font(.headline)
-                let payments = client.incomeEntries.count
+                let payments = (client.incomeEntries ?? []).filter { $0.deletedDate == nil }.count
                 Text(String(format: "%.1f hrs · %d payment%@",
                             totalHours, payments, payments == 1 ? "" : "s"))
                     .font(.caption)
@@ -154,37 +154,80 @@ struct ClientDetailView: View {
     let client: Client
     @Environment(\.modelContext) private var modelContext
 
-    @Query private var timeEntries: [TimeEntry]
-    @Query private var incomeEntries: [IncomeEntry]
+    @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }) private var timeEntries: [TimeEntry]
+    @Query(filter: #Predicate<IncomeEntry> { $0.deletedDate == nil }) private var incomeEntries: [IncomeEntry]
+    @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }) private var expenses: [Expense]
+    @Query(filter: #Predicate<Invoice> { $0.deletedDate == nil }) private var invoices: [Invoice]
 
     init(client: Client) {
         self.client = client
         let id = client.persistentModelID
         _timeEntries = Query(
-            filter: #Predicate<TimeEntry> { $0.client?.persistentModelID == id },
+            filter: #Predicate<TimeEntry> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
             sort: \TimeEntry.date, order: .reverse
         )
         _incomeEntries = Query(
-            filter: #Predicate<IncomeEntry> { $0.client?.persistentModelID == id },
+            filter: #Predicate<IncomeEntry> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
             sort: \IncomeEntry.date, order: .reverse
+        )
+        _expenses = Query(
+            filter: #Predicate<Expense> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
+            sort: \Expense.date, order: .reverse
+        )
+        _invoices = Query(
+            filter: #Predicate<Invoice> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
+            sort: \Invoice.invoiceNumber, order: .reverse
         )
     }
 
     @State private var showEditClient = false
     @State private var showLogIncome = false
+    @State private var showCreateInvoice = false
     @State private var editingIncome: IncomeEntry?
     @State private var editingTimeEntry: TimeEntry?
+    @State private var editingExpense: Expense?
+    @State private var viewingInvoice: Invoice?
     @State private var pendingDeleteIncome: ([IncomeEntry], IndexSet)?
     @State private var pendingDeleteTime: ([TimeEntry], IndexSet)?
+    @State private var pendingDeleteExpense: ([Expense], IndexSet)?
+    @State private var pendingDeleteInvoice: ([Invoice], IndexSet)?
 
-    private var totalEarnings: Decimal {
-        let time   = timeEntries.reduce(Decimal(0)) { $0 + $1.earnings }
-        let income = incomeEntries.reduce(Decimal(0)) { $0 + $1.amount }
+    // MARK: All-time aggregates (header stats)
+
+    private var totalEarnings: Double {
+        let time   = timeEntries.reduce(0.0) { $0 + $1.earnings }
+        let income = incomeEntries.reduce(0.0) { $0 + $1.amount }
         return time + income
+    }
+
+    private var totalExpenses: Double {
+        expenses.reduce(0.0) { $0 + $1.amount }
     }
 
     private var totalHours: Double {
         timeEntries.reduce(0) { $0 + $1.hours }
+    }
+
+    // MARK: Monthly P&L aggregates
+
+    private var monthStart: Date { Calendar.current.startOfMonth(for: .now) }
+
+    private var monthTimeEarnings: Double {
+        timeEntries.filter { $0.date >= monthStart }.reduce(0.0) { $0 + $1.earnings }
+    }
+
+    private var monthIncomeReceived: Double {
+        incomeEntries.filter { $0.date >= monthStart }.reduce(0.0) { $0 + $1.amount }
+    }
+
+    private var monthExpenses: Double {
+        expenses.filter { $0.date >= monthStart }.reduce(0.0) { $0 + $1.amount }
+    }
+
+    private var monthNet: Double { monthTimeEarnings + monthIncomeReceived - monthExpenses }
+
+    private var hasMonthData: Bool {
+        monthTimeEarnings > 0 || monthIncomeReceived > 0 || monthExpenses > 0
     }
 
     var body: some View {
@@ -196,20 +239,30 @@ struct ClientDetailView: View {
 
                     Text(client.name).font(.title2.bold())
 
-                    HStack(spacing: 20) {
+                    HStack(spacing: 0) {
                         VStack(spacing: 2) {
                             Text(totalEarnings.formatted(.currency(code: "USD")))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.green)
-                            Text("Total Earned").font(.caption2).foregroundStyle(.secondary)
+                            Text("Earned").font(.caption2).foregroundStyle(.secondary)
                         }
+                        .frame(maxWidth: .infinity)
                         Divider().frame(height: 28)
                         VStack(spacing: 2) {
                             Text(String(format: "%.1f hrs", totalHours))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.indigo)
-                            Text("Hours Tracked").font(.caption2).foregroundStyle(.secondary)
+                            Text("Hours").font(.caption2).foregroundStyle(.secondary)
                         }
+                        .frame(maxWidth: .infinity)
+                        Divider().frame(height: 28)
+                        VStack(spacing: 2) {
+                            Text(totalExpenses.formatted(.currency(code: "USD")))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.red)
+                            Text("Expenses").font(.caption2).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -217,6 +270,48 @@ struct ClientDetailView: View {
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+            }
+
+            // MARK: P&L card
+            if hasMonthData {
+                Section {
+                    ClientPLCard(
+                        monthLabel: Date.now.formatted(.dateTime.month(.wide)),
+                        timeEarnings: monthTimeEarnings,
+                        incomeReceived: monthIncomeReceived,
+                        expenses: monthExpenses,
+                        net: monthNet
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+            }
+
+            // MARK: Invoices section
+            Section {
+                if invoices.isEmpty {
+                    Text("No invoices yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .padding(.vertical, 4)
+                } else {
+                    ForEach(invoices) { invoice in
+                        InvoiceRow(invoice: invoice)
+                            .contentShape(Rectangle())
+                            .onTapGesture { viewingInvoice = invoice }
+                    }
+                    .onDelete { pendingDeleteInvoice = (invoices, $0) }
+                }
+            } header: {
+                HStack {
+                    Text("Invoices")
+                    Spacer()
+                    Button { showCreateInvoice = true } label: {
+                        Image(systemName: "plus")
+                            .font(.caption.weight(.semibold))
+                    }
+                }
             }
 
             // MARK: Income section
@@ -245,6 +340,23 @@ struct ClientDetailView: View {
                 }
             }
 
+            // MARK: Expenses section
+            Section("Expenses") {
+                if expenses.isEmpty {
+                    Text("No expenses logged yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .padding(.vertical, 4)
+                } else {
+                    ForEach(expenses) { expense in
+                        ExpenseRow(expense: expense)
+                            .contentShape(Rectangle())
+                            .onTapGesture { editingExpense = expense }
+                    }
+                    .onDelete { pendingDeleteExpense = (expenses, $0) }
+                }
+            }
+
             // MARK: Time entries section
             Section("Time Entries") {
                 if timeEntries.isEmpty {
@@ -270,34 +382,118 @@ struct ClientDetailView: View {
                 Button("Edit") { showEditClient = true }
             }
         }
-        .sheet(isPresented: $showEditClient)  { AddEditClientView(existingClient: client) }
+        .sheet(isPresented: $showEditClient)    { AddEditClientView(existingClient: client) }
         .sheet(isPresented: $showLogIncome)   { LogIncomeForClientView(client: client) }
+        .sheet(isPresented: $showCreateInvoice) { CreateInvoiceView(client: client) }
         .sheet(item: $editingIncome)          { IncomeEditView(entry: $0) }
+        .sheet(item: $editingExpense)         { ExpenseEditView(expense: $0) }
         .sheet(item: $editingTimeEntry)       { TimeEntryEditView(entry: $0) }
+        .sheet(item: $viewingInvoice)         { InvoiceDetailView(invoice: $0) }
         .confirmationDialog("Delete Income Entry?", isPresented: Binding(
             get: { pendingDeleteIncome != nil },
             set: { if !$0 { pendingDeleteIncome = nil } }
         ), titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 if let (items, offsets) = pendingDeleteIncome {
-                    for i in offsets { modelContext.delete(items[i]) }
+                    for i in offsets { items[i].deletedDate = .now }
                 }
                 pendingDeleteIncome = nil
             }
             Button("Cancel", role: .cancel) { pendingDeleteIncome = nil }
-        } message: { Text("This cannot be undone.") }
+        } message: { Text("You can restore this from Recently Deleted for 30 days.") }
+        .confirmationDialog("Delete Expense?", isPresented: Binding(
+            get: { pendingDeleteExpense != nil },
+            set: { if !$0 { pendingDeleteExpense = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let (items, offsets) = pendingDeleteExpense {
+                    for i in offsets { items[i].deletedDate = .now }
+                }
+                pendingDeleteExpense = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteExpense = nil }
+        } message: { Text("You can restore this from Recently Deleted for 30 days.") }
         .confirmationDialog("Delete Time Entry?", isPresented: Binding(
             get: { pendingDeleteTime != nil },
             set: { if !$0 { pendingDeleteTime = nil } }
         ), titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 if let (items, offsets) = pendingDeleteTime {
-                    for i in offsets { modelContext.delete(items[i]) }
+                    for i in offsets { items[i].deletedDate = .now }
                 }
                 pendingDeleteTime = nil
             }
             Button("Cancel", role: .cancel) { pendingDeleteTime = nil }
-        } message: { Text("This cannot be undone.") }
+        } message: { Text("You can restore this from Recently Deleted for 30 days.") }
+        .confirmationDialog("Delete Invoice?", isPresented: Binding(
+            get: { pendingDeleteInvoice != nil },
+            set: { if !$0 { pendingDeleteInvoice = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let (items, offsets) = pendingDeleteInvoice {
+                    for i in offsets { items[i].deletedDate = .now }
+                }
+                pendingDeleteInvoice = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteInvoice = nil }
+        } message: { Text("The invoice is moved to Recently Deleted. Restore within 30 days to recover it.") }
+    }
+}
+
+// MARK: - Client P&L card
+
+private struct ClientPLCard: View {
+    let monthLabel: String
+    let timeEarnings: Double
+    let incomeReceived: Double
+    let expenses: Double
+    let net: Double
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if timeEarnings > 0 {
+                plRow(label: "Time Earnings", value: timeEarnings, color: .indigo, negative: false)
+            }
+            if incomeReceived > 0 {
+                plRow(label: "Income Received", value: incomeReceived, color: .green, negative: false)
+            }
+            if expenses > 0 {
+                plRow(label: "Expenses", value: expenses, color: .red, negative: true)
+            }
+
+            Divider().padding(.horizontal, 16)
+
+            HStack {
+                Text("Net \(monthLabel)")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(net.formatted(.currency(code: "USD")))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(net >= 0 ? .green : .red)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background((net >= 0 ? Color.green : Color.red).opacity(0.12), in: Capsule())
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+    }
+
+    private func plRow(label: String, value: Double, color: Color, negative: Bool) -> some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("\(negative ? "−" : "")\(value.formatted(.currency(code: "USD")))")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
     }
 }
 
@@ -359,7 +555,7 @@ struct LogIncomeForClientView: View {
 
     private var canSave: Bool {
         !source.trimmingCharacters(in: .whitespaces).isEmpty &&
-        (Decimal(string: amountText) ?? 0) > 0
+        (Double(amountText) ?? 0) > 0
     }
 
     var body: some View {
@@ -386,6 +582,14 @@ struct LogIncomeForClientView: View {
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
                             .frame(width: 100)
+                            .onChange(of: amountText) { _, new in
+                                var s = new.filter { $0.isNumber || $0 == "." }
+                                if let dot = s.firstIndex(of: ".") {
+                                    let frac = String(s[s.index(after: dot)...].filter(\.isNumber).prefix(2))
+                                    s = String(s[..<dot]) + "." + frac
+                                }
+                                if s != new { amountText = s }
+                            }
                     }
                 }
 
@@ -431,7 +635,7 @@ struct LogIncomeForClientView: View {
         let entry = IncomeEntry(
             date: date,
             source: source.trimmingCharacters(in: .whitespaces),
-            amount: Decimal(string: amountText) ?? 0,
+            amount: Double(amountText) ?? 0,
             notes: notes,
             client: client
         )

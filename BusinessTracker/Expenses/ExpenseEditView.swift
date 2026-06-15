@@ -4,7 +4,7 @@ import PhotosUI
 
 struct ExpenseEditView: View {
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
 
     let expense: Expense
 
@@ -22,7 +22,7 @@ struct ExpenseEditView: View {
     init(expense: Expense) {
         self.expense = expense
         _date = State(initialValue: expense.date)
-        _amountText = State(initialValue: "\(expense.amount)")
+        _amountText = State(initialValue: String(format: "%.2f", expense.amount))
         _category = State(initialValue: expense.category)
         _selectedClient = State(initialValue: expense.client)
         _notes = State(initialValue: expense.notes)
@@ -37,7 +37,7 @@ struct ExpenseEditView: View {
     }
 
     private var canSave: Bool {
-        (Decimal(string: amountText) ?? 0) > 0
+        (Double(amountText) ?? 0) > 0
     }
 
     var body: some View {
@@ -54,6 +54,14 @@ struct ExpenseEditView: View {
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.decimalPad)
                             .frame(width: 100)
+                            .onChange(of: amountText) { _, new in
+                                var s = new.filter { $0.isNumber || $0 == "." }
+                                if let dot = s.firstIndex(of: ".") {
+                                    let frac = String(s[s.index(after: dot)...].filter(\.isNumber).prefix(2))
+                                    s = String(s[..<dot]) + "." + frac
+                                }
+                                if s != new { amountText = s }
+                            }
                     }
 
                     Picker("Category", selection: $category) {
@@ -142,6 +150,8 @@ struct ExpenseEditView: View {
                 CameraView { image in
                     receiptImages.append(image)
                     showCamera = false
+                } onCancel: {
+                    showCamera = false
                 }
                 .ignoresSafeArea()
             }
@@ -153,7 +163,7 @@ struct ExpenseEditView: View {
 
     private func save() {
         expense.date = date
-        expense.amount = Decimal(string: amountText) ?? expense.amount
+        expense.amount = Double(amountText) ?? expense.amount
         expense.category = category
         expense.client = selectedClient
         expense.notes = notes

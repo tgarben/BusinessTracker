@@ -3,19 +3,19 @@ import SwiftData
 
 @Model
 final class TimePreset {
-    var name: String
+    var name: String = ""
     var client: Client?
     var project: Project?
-    var sortOrder: Int
+    var sortOrder: Int = 0
 
     /// If set, overrides the project's hourly rate when saving via this preset.
-    var hourlyRateOverride: Decimal?
+    var hourlyRateOverride: Double? = nil
 
     /// Pre-filled notes template. Appears in the entry's notes field; still editable after save.
-    var notesTemplate: String
+    var notesTemplate: String = ""
 
     /// The effective rate: override if set, otherwise falls back to the project rate.
-    var effectiveRate: Decimal {
+    var effectiveRate: Double {
         hourlyRateOverride ?? project?.hourlyRate ?? 0
     }
 
@@ -24,7 +24,7 @@ final class TimePreset {
         client: Client? = nil,
         project: Project? = nil,
         sortOrder: Int = 0,
-        hourlyRateOverride: Decimal? = nil,
+        hourlyRateOverride: Double? = nil,
         notesTemplate: String = ""
     ) {
         self.name = name

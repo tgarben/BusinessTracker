@@ -3,8 +3,9 @@ import UIKit
 
 struct CameraView: UIViewControllerRepresentable {
     let onCapture: (UIImage) -> Void
+    let onCancel: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onCapture: onCapture) }
+    func makeCoordinator() -> Coordinator { Coordinator(onCapture: onCapture, onCancel: onCancel) }
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
@@ -17,17 +18,24 @@ struct CameraView: UIViewControllerRepresentable {
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let onCapture: (UIImage) -> Void
-        init(onCapture: @escaping (UIImage) -> Void) { self.onCapture = onCapture }
+        let onCancel: () -> Void
+
+        init(onCapture: @escaping (UIImage) -> Void, onCancel: @escaping () -> Void) {
+            self.onCapture = onCapture
+            self.onCancel = onCancel
+        }
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
                 onCapture(image)
             }
-            picker.dismiss(animated: true)
+            // Do NOT call picker.dismiss(animated:) — doing so inside a fullScreenCover
+            // that is itself inside a sheet propagates the dismiss upward and closes the
+            // parent form. SwiftUI dismisses the fullScreenCover via the binding instead.
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
+            onCancel()
         }
     }
 }

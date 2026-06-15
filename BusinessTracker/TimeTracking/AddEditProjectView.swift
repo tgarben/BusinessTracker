@@ -9,7 +9,8 @@ struct AddEditProjectView: View {
     var client: Client?
 
     @State private var name: String = ""
-    @State private var hourlyRate: Decimal = 0
+    @State private var hourlyRate: Double = 0
+    @State private var rateText: String = ""
 
     private var isEditing: Bool { project != nil }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -20,9 +21,21 @@ struct AddEditProjectView: View {
                 Section("Project Info") {
                     TextField("Project name", text: $name)
                     LabeledContent("Hourly Rate") {
-                        TextField("0.00", value: $hourlyRate, format: .currency(code: "USD"))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
+                        HStack(spacing: 2) {
+                            Text("$").foregroundStyle(.secondary)
+                            TextField("0.00", text: $rateText)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                                .onChange(of: rateText) { _, new in
+                                    var s = new.filter { $0.isNumber || $0 == "." }
+                                    if let dot = s.firstIndex(of: ".") {
+                                        let frac = String(s[s.index(after: dot)...].filter(\.isNumber).prefix(2))
+                                        s = String(s[..<dot]) + "." + frac
+                                    }
+                                    if s != new { rateText = s }
+                                    hourlyRate = Double(s) ?? 0
+                                }
+                        }
                     }
                 }
 //                if let client {
@@ -47,6 +60,7 @@ struct AddEditProjectView: View {
                 if let project {
                     name = project.name
                     hourlyRate = project.hourlyRate
+                    rateText = hourlyRate > 0 ? String(format: "%.2f", hourlyRate) : ""
                 }
             }
         }

@@ -25,8 +25,10 @@ struct RecentAddress: Codable, Identifiable, Hashable {
 @Observable
 final class RecentAddressStore {
     private(set) var recents: [RecentAddress] = []
+    private(set) var favorites: [RecentAddress] = []
 
     private let userDefaultsKey = "mileage_recent_addresses"
+    private let favoritesKey = "mileage_favoriteAddresses"
     private let maxCount = 8
 
     init() { load() }
@@ -49,17 +51,46 @@ final class RecentAddressStore {
         save()
     }
 
+    // MARK: - Favorites
+
+    func isFavorite(label: String) -> Bool {
+        favorites.contains { $0.label == label }
+    }
+
+    /// Promotes a recent (or any address) to favorites, or removes it if already favorited.
+    func toggleFavorite(_ address: RecentAddress) {
+        if isFavorite(label: address.label) {
+            favorites.removeAll { $0.label == address.label }
+        } else {
+            favorites.insert(address, at: 0)
+        }
+        save()
+    }
+
+    func removeFavorite(at offsets: IndexSet) {
+        favorites.remove(atOffsets: offsets)
+        save()
+    }
+
     // MARK: - Persistence
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-              let decoded = try? JSONDecoder().decode([RecentAddress].self, from: data)
-        else { return }
-        recents = decoded
+        if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
+           let decoded = try? JSONDecoder().decode([RecentAddress].self, from: data) {
+            recents = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: favoritesKey),
+           let decoded = try? JSONDecoder().decode([RecentAddress].self, from: data) {
+            favorites = decoded
+        }
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(recents) else { return }
-        UserDefaults.standard.set(data, forKey: userDefaultsKey)
+        if let data = try? JSONEncoder().encode(recents) {
+            UserDefaults.standard.set(data, forKey: userDefaultsKey)
+        }
+        if let data = try? JSONEncoder().encode(favorites) {
+            UserDefaults.standard.set(data, forKey: favoritesKey)
+        }
     }
 }

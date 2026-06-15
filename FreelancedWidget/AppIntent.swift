@@ -1,6 +1,6 @@
-import WidgetKit
-import SwiftUI
 import AppIntents
+import SwiftUI
+import WidgetKit
 
 // MARK: - Quick Action enum (mirrored from the main app)
 
@@ -9,37 +9,42 @@ enum WidgetQuickAction: String, CaseIterable, AppEnum {
     case logTime
     case logTrip
     case addExpense
+    case createInvoice
 
     static var typeDisplayRepresentation: TypeDisplayRepresentation {
         TypeDisplayRepresentation(name: "Quick Action")
     }
 
+    // Stable identifier — must not change or saved configurations won't decode
     static var typeIdentifier: String { "com.garbenTechnologies.BusinessTracker.WidgetQuickAction" }
 
     static var caseDisplayRepresentations: [WidgetQuickAction: DisplayRepresentation] {
         [
-            .startTimer: DisplayRepresentation(title: "Start Timer",   image: .init(systemName: "play.fill")),
-            .logTime:    DisplayRepresentation(title: "Log Time",       image: .init(systemName: "clock.fill")),
-            .logTrip:    DisplayRepresentation(title: "Log Trip",       image: .init(systemName: "car.fill")),
-            .addExpense: DisplayRepresentation(title: "Add Expense",    image: .init(systemName: "creditcard.fill")),
+            .startTimer:    DisplayRepresentation(title: "Start Timer",    image: .init(systemName: "play.fill")),
+            .logTime:       DisplayRepresentation(title: "Log Time",       image: .init(systemName: "clock.fill")),
+            .logTrip:       DisplayRepresentation(title: "Log Trip",       image: .init(systemName: "car.fill")),
+            .addExpense:    DisplayRepresentation(title: "Add Expense",    image: .init(systemName: "creditcard.fill")),
+            .createInvoice: DisplayRepresentation(title: "Create Invoice", image: .init(systemName: "doc.text.fill")),
         ]
     }
 
     var label: String {
         switch self {
-        case .startTimer: return "Start Timer"
-        case .logTime:    return "Log Time"
-        case .logTrip:    return "Log Trip"
-        case .addExpense: return "Add Expense"
+        case .startTimer:    return "Start Timer"
+        case .logTime:       return "Log Time"
+        case .logTrip:       return "Log Trip"
+        case .addExpense:    return "Add Expense"
+        case .createInvoice: return "Create Invoice"
         }
     }
 
     var icon: String {
         switch self {
-        case .startTimer: return "play.fill"
-        case .logTime:    return "clock.fill"
-        case .logTrip:    return "car.fill"
-        case .addExpense: return "creditcard.fill"
+        case .startTimer:    return "play.fill"
+        case .logTime:       return "clock.fill"
+        case .logTrip:       return "car.fill"
+        case .addExpense:    return "creditcard.fill"
+        case .createInvoice: return "doc.text.fill"
         }
     }
 
@@ -52,6 +57,7 @@ enum WidgetQuickAction: String, CaseIterable, AppEnum {
         case .startTimer, .logTime: return .indigo
         case .logTrip:              return .blue
         case .addExpense:           return .red
+        case .createInvoice:        return .purple
         }
     }
 }
@@ -86,3 +92,4 @@ struct QuadActionConfiguration: WidgetConfigurationIntent {
 
     var actions: [WidgetQuickAction] { [action1, action2, action3, action4] }
 }
+

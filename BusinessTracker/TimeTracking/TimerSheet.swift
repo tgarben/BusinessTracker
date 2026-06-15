@@ -5,7 +5,7 @@ struct TimerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(TimerState.self) private var timerState
-    @Query(sort: \Client.name) private var clients: [Client]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
     @Query(sort: \TimePreset.sortOrder) private var presets: [TimePreset]
 
     @AppStorage("default_hourlyRate") private var defaultHourlyRate: Double = 0
@@ -13,6 +13,7 @@ struct TimerSheet: View {
     @State private var selectedClient: Client?
     @State private var selectedProject: Project?
     @State private var activePreset: TimePreset?   // preset used to start this session
+    @State private var showPresets = false
 
     // Post-save confirmation state
     @State private var savedHours: Double?
@@ -20,7 +21,7 @@ struct TimerSheet: View {
     @State private var savedProject: Project?
 
     private var availableProjects: [Project] {
-        selectedClient?.projects.sorted { $0.name < $1.name } ?? []
+        (selectedClient?.projects ?? []).sorted { $0.name < $1.name }
     }
 
     var body: some View {
@@ -87,13 +88,26 @@ struct TimerSheet: View {
                                                     .font(.caption.bold())
                                                     .padding(.horizontal, 12)
                                                     .padding(.vertical, 6)
-                                                    .background(.regularMaterial, in: Capsule())
+                                                    .background(activePreset?.persistentModelID == preset.persistentModelID
+                                                                ? AnyShapeStyle(.indigo.opacity(0.2))
+                                                                : AnyShapeStyle(.regularMaterial), in: Capsule())
                                             }
-                                            .foregroundStyle(.primary)
+                                            .foregroundStyle(activePreset?.persistentModelID == preset.persistentModelID ? .indigo : .primary)
                                         }
                                     }
                                     .padding(.horizontal, 2)
                                 }
+                            }
+
+                            // Prominent manage-presets button
+                            Button { showPresets = true } label: {
+                                Label(presets.isEmpty ? "Create a Preset" : "Manage Presets",
+                                      systemImage: "slider.horizontal.3")
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(.indigo.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                                    .foregroundStyle(.indigo)
                             }
                         }
                         .padding(.horizontal)
@@ -141,6 +155,9 @@ struct TimerSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showPresets) {
+                PresetsView()
+            }
         }
     }
 
@@ -182,7 +199,7 @@ struct TimerSheet: View {
         let hours   = timerState.stop()
 
         // Preset overrides take priority; fall back to project rate, then global default
-        let rate  = activePreset?.effectiveRate ?? project?.hourlyRate ?? (defaultHourlyRate > 0 ? Decimal(defaultHourlyRate) : 0)
+        let rate  = activePreset?.effectiveRate ?? project?.hourlyRate ?? defaultHourlyRate
         let notes = activePreset?.notesTemplate ?? ""
 
         let entry = TimeEntry(
