@@ -34,6 +34,7 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 | Settings & Profile | ✅ Done (Profile page with avatar header; presets management; all config sections) |
 | Recently Deleted (soft-delete) | ✅ Done (30-day trash + restore for all six record types; Settings → Recently Deleted) |
 | iCloud Sync | ✅ Done (confirmed working on device 2026-06-13) |
+| Quote / Estimate generator | ⬜ Planned (Jack's idea — pre-sale counterpart to invoicing; reuse line items, business/customer info, PDF; "convert to invoice" action) |
 | Package Tracking | ⬜ Future (API integration) |
 | Home Screen Widgets | ✅ Done (medium 4-action + small single-action quick-action widgets; read-only Quarterly Tax Due Dates widget; Live Activity on timer start) |
 | Live Activities | ✅ Done (Dynamic Island + lock screen banner while timer runs; starts when app foregrounds after widget tap) |
@@ -374,6 +375,15 @@ FreelancedWidget/                    (WidgetKit extension target)
 ---
 
 ## What's left to build
+
+**Planned features (not started):**
+- **Quote / Estimate generator** (Jack's idea) — let users create professional quotes/estimates for prospective work *before* it's done (pre-sale counterpart to an invoice). Should closely mirror Invoicing and reuse its infrastructure:
+  - New `Quote` SwiftData model paralleling `Invoice` (`quoteNumber`, `issueDate`, `validUntil` instead of `dueDate`, `notes`, `discountAmount`, `taxRate`, `paymentTerms`, `poNumber`, `client?`, cascade `lineItems: [InvoiceLineItem]`-style). Quotes are manual line items only (description/qty/unit price) — no time-entry billing, since the work hasn't happened yet. Add a `status` (Draft / Sent / Accepted / Declined / Expired).
+  - Reuse `BusinessInfo` (business header), `Client` billing details ("Quote For"), the line-item editor, and the totals math (subtotal → discount → tax → total).
+  - PDF: clone the `makeInvoicePDF` multi-page approach with a `QUOTE` / `ESTIMATE` header, "Valid until" date, and an optional acceptance/signature line. Likely a shared PDF layout parameterized by document type to avoid duplication.
+  - **Quote → Invoice conversion:** key value-add — an "Accept & convert to invoice" action that copies the quote's line items into a new `Invoice`. This is the main reason to share `InvoiceLineItem`.
+  - Access: a new section in `ClientDetailView` (Quotes, above/below Invoices) + a "Create Quote" Home quick action and `WidgetQuickAction`/Shortcut, mirroring "Create Invoice".
+  - Consider a unified "Documents" tab or grouping if Quotes + Invoices both live under each client.
 
 **Remaining / future:**
 - **Lock screen widgets** — deferred until Firebase Blaze (or equivalent server) is justified by MRR. Full design in the Widgets section.

@@ -525,9 +525,15 @@ struct SettingsView: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("Done") { fieldFocused = false }
-                        .padding(.top, 8)
-                        .padding(.bottom, 4)
+                    Button("Done") {
+                        fieldFocused = false
+                        // Also dismiss fields that aren't bound to fieldFocused (e.g. AddressEntryField).
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+                        )
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
                 }
             }
             .sheet(item: $exportItem) { item in

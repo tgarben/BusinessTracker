@@ -31,6 +31,8 @@ struct AddressEntryField: View {
                     }
                     .buttonStyle(.plain)
                 }
+                Divider()
+                    .padding(4)
                 TextField("Apt, Suite, Unit (optional)", text: $line2)
             }
         }

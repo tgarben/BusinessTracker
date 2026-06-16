@@ -9,7 +9,7 @@ struct OnboardingView: View {
     @AppStorage("user_name") private var userName: String = ""
     @State private var page = 0
 
-    private let total = 4
+    private let total = 5
 
     var body: some View {
         ZStack {
@@ -20,10 +20,12 @@ struct OnboardingView: View {
                     .tag(0)
                 AboutYouPage(page: 1, total: total) { advance() }
                     .tag(1)
-                PermissionsPage(page: 2, total: total, onSkip: { advance() }) { advance() }
+                BusinessInfoPage(page: 2, total: total, onSkip: { advance() }) { advance() }
                     .tag(2)
-                ReadyPage(page: 3, total: total, name: userName) { finish() }
+                PermissionsPage(page: 3, total: total, onSkip: { advance() }) { advance() }
                     .tag(3)
+                ReadyPage(page: 4, total: total, name: userName) { finish() }
+                    .tag(4)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.spring(duration: 0.4), value: page)
@@ -111,6 +113,7 @@ private struct OnboardingScaffold<Content: View>: View {
                     .padding(.top, 28)
                     .padding(.bottom, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
 
             VStack(spacing: 6) {
                 Button(action: onPrimary) {
@@ -214,13 +217,16 @@ private struct AboutYouPage: View {
     let onNext: () -> Void
 
     @AppStorage("user_name") private var storedName: String = ""
+    @AppStorage("user_lastName") private var storedLastName: String = ""
     @AppStorage("home_sectionOrder") private var sectionOrder: String = HomeSection.defaultOrderString
     @AppStorage("user_primaryUse") private var primaryUse: String = ""
 
     @State private var name: String = ""
+    @State private var lastName: String = ""
     @State private var focuses: Set<String> = []
-    @FocusState private var nameFocused: Bool
+    @FocusState private var focusedField: NameField?
 
+    private enum NameField { case first, last }
     private let focusOptions = ["Time Tracking", "Mileage", "Expenses", "Invoicing"]
 
     var body: some View {
@@ -254,14 +260,33 @@ private struct AboutYouPage: View {
                     .padding(.leading, 4)
                     .padding(.bottom, 8)
 
-                TextField("First name", text: $name)
-                    .font(.body)
-                    .focused($nameFocused)
-                    .submitLabel(.done)
-                    .onSubmit { nameFocused = false }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                VStack(spacing: 10) {
+                    TextField("First name", text: $name)
+                        .font(.body)
+                        .textContentType(.givenName)
+                        .focused($focusedField, equals: .first)
+                        .submitLabel(.next)
+                        .onSubmit { focusedField = .last }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+
+                    TextField("Last name", text: $lastName)
+                        .font(.body)
+                        .textContentType(.familyName)
+                        .focused($focusedField, equals: .last)
+                        .submitLabel(.done)
+                        .onSubmit { focusedField = nil }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                }
+
+                Text("Your last name appears on invoices and data exports.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 8)
+                    .padding(.leading, 4)
 
                 Text("WHAT DO YOU FOCUS ON?")
                     .font(.caption.weight(.semibold))
@@ -285,6 +310,7 @@ private struct AboutYouPage: View {
         }
         .onAppear {
             name = storedName
+            lastName = storedLastName
             focuses = Set(primaryUse.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
         }
     }
@@ -319,11 +345,88 @@ private struct AboutYouPage: View {
 
     private func save() {
         storedName = name.trimmingCharacters(in: .whitespaces)
+        storedLastName = lastName.trimmingCharacters(in: .whitespaces)
         let ordered = focusOptions.filter { focuses.contains($0) }
         primaryUse = ordered.joined(separator: ",")
         sectionOrder = HomeSection.orderString(forFocuses: primaryUse)
-        nameFocused = false
+        focusedField = nil
         onNext()
+    }
+}
+
+// MARK: - Business info
+
+private struct BusinessInfoPage: View {
+    let page: Int
+    let total: Int
+    let onSkip: () -> Void
+    let onNext: () -> Void
+
+    @AppStorage("business_name") private var businessName: String = ""
+    @AppStorage("business_address") private var businessAddress: String = ""
+    @AppStorage("business_address2") private var businessAddress2: String = ""
+    @AppStorage("business_phone") private var businessPhone: String = ""
+    @AppStorage("business_email") private var businessEmail: String = ""
+    @AppStorage("business_website") private var businessWebsite: String = ""
+    @AppStorage("business_taxID") private var businessTaxID: String = ""
+
+    var body: some View {
+        OnboardingScaffold(
+            page: page, total: total,
+            onSkip: onSkip,
+            primaryLabel: "Continue",
+            onPrimary: onNext
+        ) {
+            VStack(alignment: .leading, spacing: 0) {
+                OnboardingBadge(icon: "building.2.fill", size: 76)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 22)
+
+                Text("Your business")
+                    .font(.system(.largeTitle, design: .rounded).bold())
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
+
+                Text("This appears on the invoices you send. Add it now or anytime in Settings.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+                    .padding(.bottom, 28)
+
+                VStack(spacing: 10) {
+                    field("Business name", text: $businessName, keyboard: .default)
+
+                    AddressEntryField(label: "", line1: $businessAddress, line2: $businessAddress2)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+
+                    field("Phone", text: $businessPhone, keyboard: .phonePad, isPhone: true)
+                    field("Email", text: $businessEmail, keyboard: .emailAddress)
+                    field("Website", text: $businessWebsite, keyboard: .URL)
+                    field("Tax ID / EIN", text: $businessTaxID, keyboard: .default)
+                }
+            }
+        }
+    }
+
+    private func field(_ placeholder: String, text: Binding<String>, keyboard: UIKeyboardType, isPhone: Bool = false) -> some View {
+        let lower = keyboard == .emailAddress || keyboard == .URL
+        return TextField(placeholder, text: text)
+            .font(.body)
+            .keyboardType(keyboard)
+            .textInputAutocapitalization(lower ? .never : .words)
+            .autocorrectionDisabled(lower)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+            .onChange(of: text.wrappedValue) { _, new in
+                guard isPhone else { return }
+                let formatted = formatPhoneNumber(new)
+                if formatted != new { text.wrappedValue = formatted }
+            }
     }
 }
 
