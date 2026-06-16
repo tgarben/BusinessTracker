@@ -10,6 +10,7 @@ final class Client: SoftDeletable {
     // Customer billing details (used on invoices)
     var companyName: String = ""
     var billingAddress: String = ""
+    var billingAddress2: String = ""   // Apt / Suite / Unit
     var email: String = ""
     var phone: String = ""
 

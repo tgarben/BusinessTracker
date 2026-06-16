@@ -3,12 +3,17 @@ import SwiftData
 
 struct ExpensesView: View {
     @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }, sort: \Expense.date, order: .reverse) private var expenses: [Expense]
+    @Query(sort: \ExpensePreset.sortOrder) private var presets: [ExpensePreset]
     @Environment(\.modelContext) private var modelContext
+
+    @AppStorage("expense_presetInstantSave") private var instantSave: Bool = false
 
     @State private var showAddExpense = false
     @State private var showHistory = false
     @State private var showSettings = false
     @State private var editingExpense: Expense?
+    @State private var prefillPreset: ExpensePreset?
+    @State private var fabExpanded = false
     @State private var pendingDelete: ([Expense], IndexSet)?
 
     private var monthStart: Date {
@@ -68,27 +73,24 @@ struct ExpensesView: View {
                     )
                 }
             }
+            .overlay(alignment: .bottomTrailing) { expenseFAB }
             .navigationTitle("Expenses")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "person.crop.circle")
                     }
                 }
-                ToolbarSpacer(placement: .topBarLeading)
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("History") { showHistory = true }
                         .disabled(expenses.isEmpty)
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showAddExpense = true } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-
             }
             .sheet(isPresented: $showAddExpense) {
                 AddExpenseView()
+            }
+            .sheet(item: $prefillPreset) { preset in
+                AddExpenseView(prefillPreset: preset)
             }
             .sheet(item: $editingExpense) { expense in
                 ExpenseEditView(expense: expense)
@@ -118,6 +120,102 @@ struct ExpensesView: View {
 
     private func deleteExpenses(from list: [Expense], at offsets: IndexSet) {
         for index in offsets { list[index].deletedDate = .now }
+    }
+
+    // MARK: - Floating action button + preset speed-dial
+
+    @ViewBuilder
+    private var expenseFAB: some View {
+        ZStack(alignment: .bottomTrailing) {
+            // Tap-to-dismiss scrim while expanded
+            if fabExpanded {
+                Color.black.opacity(0.06)
+                    .ignoresSafeArea()
+                    .onTapGesture { collapseFAB() }
+                    .transition(.opacity)
+            }
+
+            VStack(alignment: .trailing, spacing: 12) {
+                if fabExpanded {
+                    ForEach(presets) { preset in
+                        speedDialItem(
+                            title: preset.name,
+                            subtitle: preset.amount.map { $0.formatted(.currency(code: "USD")) } ?? preset.category,
+                            icon: Expense.categoryIcon(preset.category)
+                        ) { selectPreset(preset) }
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+                    speedDialItem(title: "New Expense", subtitle: "Blank form", icon: "square.and.pencil") {
+                        collapseFAB()
+                        showAddExpense = true
+                    }
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+
+                Button {
+                    if presets.isEmpty {
+                        showAddExpense = true
+                    } else {
+                        withAnimation(.spring(duration: 0.3)) { fabExpanded.toggle() }
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 58, height: 58)
+                        .background(.red, in: Circle())
+                        .rotationEffect(.degrees(fabExpanded ? 45 : 0))
+                        .shadow(color: .red.opacity(0.35), radius: 10, x: 0, y: 4)
+                }
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, 20)
+        }
+    }
+
+    private func speedDialItem(title: String, subtitle: String?, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                    if let subtitle {
+                        Text(subtitle).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+
+                ZStack {
+                    Circle().fill(.red).frame(width: 44, height: 44)
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func collapseFAB() {
+        withAnimation(.spring(duration: 0.3)) { fabExpanded = false }
+    }
+
+    private func selectPreset(_ preset: ExpensePreset) {
+        collapseFAB()
+        if instantSave, let amount = preset.amount, amount > 0 {
+            let expense = Expense(
+                date: .now,
+                amount: amount,
+                category: preset.category,
+                notes: preset.notes,
+                client: nil
+            )
+            modelContext.insert(expense)
+        } else {
+            prefillPreset = preset
+        }
     }
 }
 

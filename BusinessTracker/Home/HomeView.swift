@@ -12,11 +12,19 @@ enum HomeSection: String, CaseIterable {
 
     static func orderString(forUse use: String) -> String {
         switch use {
-        case "Time & Billing": return "thisWeek,quickActions,todayGlance"
+        case "Time Tracking", "Time & Billing": return "thisWeek,quickActions,todayGlance"
         case "Mileage":        return "todayGlance,thisWeek,quickActions"
         case "Expenses":       return "todayGlance,quickActions,thisWeek"
         default:               return defaultOrderString
         }
+    }
+
+    /// App Focus is multi-select (comma-separated). When exactly one focus is chosen we
+    /// tailor the Home section order to it; otherwise we use the balanced default.
+    static func orderString(forFocuses focuses: String) -> String {
+        let set = focuses.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard set.count == 1, let only = set.first else { return defaultOrderString }
+        return orderString(forUse: only)
     }
 
     var title: String {
@@ -198,7 +206,7 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "person.crop.circle")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {

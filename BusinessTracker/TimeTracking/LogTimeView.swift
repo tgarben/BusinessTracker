@@ -10,6 +10,7 @@ struct LogTimeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
+    @Query(sort: \TimePreset.sortOrder) private var presets: [TimePreset]
 
     @AppStorage("default_hourlyRate") private var defaultHourlyRate: Double = 0
 
@@ -18,6 +19,8 @@ struct LogTimeView: View {
     @State private var hourlyRate: Double = 0
     @State private var rateText: String = ""
     @State private var notes: String = ""
+    @State private var activePreset: TimePreset?
+    @State private var applyingPreset = false
 
     // Duration mode
     @State private var date: Date = .now
@@ -62,6 +65,31 @@ struct LogTimeView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if !presets.isEmpty {
+                    Section("Presets") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(presets) { preset in
+                                    let isActive = activePreset?.persistentModelID == preset.persistentModelID
+                                    Button { applyPreset(preset) } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "bolt.fill").font(.footnote)
+                                            Text(preset.name).font(.body.weight(.semibold)).lineLimit(1)
+                                        }
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(isActive ? Color.indigo.opacity(0.18) : Color(.systemGray5), in: Capsule())
+                                        .foregroundStyle(isActive ? .indigo : .primary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    }
+                }
+
                 Section("Client & Project") {
                     Picker("Client", selection: $selectedClient) {
                         Text("Select a client").tag(Optional<Client>.none)
@@ -70,9 +98,11 @@ struct LogTimeView: View {
                         }
                     }
                     .onChange(of: selectedClient) { _, _ in
+                        guard !applyingPreset else { return }
                         selectedProject = nil
                         hourlyRate = 0
                         rateText = ""
+                        activePreset = nil
                     }
 
                     if !availableProjects.isEmpty {
@@ -83,6 +113,7 @@ struct LogTimeView: View {
                             }
                         }
                         .onChange(of: selectedProject) { _, newProject in
+                            guard !applyingPreset else { return }
                             hourlyRate = newProject?.hourlyRate ?? 0
                             rateText = hourlyRate > 0 ? String(format: "%.2f", hourlyRate) : ""
                         }
@@ -186,6 +217,19 @@ struct LogTimeView: View {
                 }
             }
         }
+    }
+
+    private func applyPreset(_ preset: TimePreset) {
+        // Guard so the client/project onChange handlers don't wipe the preset's rate.
+        applyingPreset = true
+        selectedClient = preset.client
+        selectedProject = preset.project
+        let rate = preset.effectiveRate
+        hourlyRate = rate
+        rateText = rate > 0 ? String(format: "%.2f", rate) : ""
+        if !preset.notesTemplate.isEmpty { notes = preset.notesTemplate }
+        activePreset = preset
+        DispatchQueue.main.async { applyingPreset = false }
     }
 
     private func save() {

@@ -2,311 +2,470 @@ import SwiftUI
 import CoreLocation
 import UserNotifications
 
+// MARK: - Root
+
 struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @State private var currentPage = 0
+    @AppStorage("user_name") private var userName: String = ""
+    @State private var page = 0
+
+    private let total = 4
 
     var body: some View {
-        TabView(selection: $currentPage) {
-            WelcomePage(onNext: { currentPage = 1 })
-                .tag(0)
-            AboutYouPage(onNext: { currentPage = 2 })
-                .tag(1)
-            LocationPage(onNext: { currentPage = 3 })
-                .tag(2)
-            NotificationsPage(onNext: { currentPage = 4 })
-                .tag(3)
-            ReadyPage(onDone: { hasCompletedOnboarding = true })
-                .tag(4)
+        ZStack {
+            Color(.systemGroupedBackground).ignoresSafeArea()
+
+            TabView(selection: $page) {
+                WelcomePage(page: 0, total: total) { advance() }
+                    .tag(0)
+                AboutYouPage(page: 1, total: total) { advance() }
+                    .tag(1)
+                PermissionsPage(page: 2, total: total, onSkip: { advance() }) { advance() }
+                    .tag(2)
+                ReadyPage(page: 3, total: total, name: userName) { finish() }
+                    .tag(3)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .animation(.spring(duration: 0.4), value: page)
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .ignoresSafeArea()
-        .animation(.easeInOut, value: currentPage)
+    }
+
+    private func advance() {
+        withAnimation(.spring(duration: 0.4)) { page = min(page + 1, total - 1) }
+    }
+
+    private func finish() {
+        hasCompletedOnboarding = true
+    }
+}
+
+// MARK: - Shared building blocks
+
+private let onboardingIndigo = Color.indigo
+
+/// App-icon-style rounded badge with a white glyph.
+private struct OnboardingBadge: View {
+    let icon: String
+    var color: Color = onboardingIndigo
+    var size: CGFloat = 96
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
+            .fill(color.gradient)
+            .frame(width: size, height: size)
+            .overlay(
+                Image(systemName: icon)
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(.white)
+            )
+            .shadow(color: color.opacity(0.3), radius: 14, x: 0, y: 8)
+    }
+}
+
+private struct OnboardingProgress: View {
+    let current: Int
+    let total: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<total, id: \.self) { i in
+                Capsule()
+                    .fill(i <= current ? onboardingIndigo : Color.secondary.opacity(0.22))
+                    .frame(width: i == current ? 24 : 7, height: 7)
+            }
+        }
+        .animation(.spring(duration: 0.4), value: current)
+    }
+}
+
+/// Page scaffold: progress + optional skip on top, scrollable content, pinned buttons at bottom.
+private struct OnboardingScaffold<Content: View>: View {
+    let page: Int
+    let total: Int
+    var onSkip: (() -> Void)? = nil
+    let primaryLabel: String
+    var primaryColor: Color = onboardingIndigo
+    var primaryDisabled: Bool = false
+    let onPrimary: () -> Void
+    var secondaryLabel: String? = nil
+    var onSecondary: (() -> Void)? = nil
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                OnboardingProgress(current: page, total: total)
+                Spacer()
+                if let onSkip {
+                    Button("Skip", action: onSkip)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+
+            ScrollView(showsIndicators: false) {
+                content()
+                    .padding(.horizontal, 28)
+                    .padding(.top, 28)
+                    .padding(.bottom, 16)
+            }
+
+            VStack(spacing: 6) {
+                Button(action: onPrimary) {
+                    Text(primaryLabel)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(primaryColor.gradient, in: RoundedRectangle(cornerRadius: 15))
+                        .opacity(primaryDisabled ? 0.5 : 1)
+                }
+                .disabled(primaryDisabled)
+
+                if let secondaryLabel, let onSecondary {
+                    Button(secondaryLabel, action: onSecondary)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 6)
+            .padding(.bottom, 16)
+        }
     }
 }
 
 // MARK: - Welcome
 
 private struct WelcomePage: View {
+    let page: Int
+    let total: Int
     let onNext: () -> Void
 
+    private let features: [(icon: String, color: Color, title: String, subtitle: String)] = [
+        ("clock.fill", .indigo, "Time tracking", "Live timer or manual entry, billed per project"),
+        ("car.fill", .blue, "Mileage", "Auto driving distance with IRS deductions"),
+        ("creditcard.fill", .red, "Expenses", "Categorize and attach receipts"),
+        ("doc.text.fill", .purple, "Invoices", "Professional PDFs from your tracked work"),
+    ]
+
     var body: some View {
-        OnboardingPageLayout(
-            icon: "briefcase.fill",
-            iconColor: .indigo,
-            title: "Welcome to\nFreelance Tracker",
-            subtitle: "Track your time, mileage, and expenses in one place — built for people who work for themselves.",
-            buttonLabel: "Get Started",
-            onNext: onNext
-        )
+        OnboardingScaffold(page: page, total: total, primaryLabel: "Get Started", onPrimary: onNext) {
+            VStack(spacing: 0) {
+                OnboardingBadge(icon: "stopwatch.fill", size: 92)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
+
+                Text("Welcome to Freelanced")
+                    .font(.system(.largeTitle, design: .rounded).bold())
+                    .multilineTextAlignment(.center)
+
+                Text("Everything you need to run your freelance business — in one place.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 10)
+                    .padding(.horizontal, 8)
+
+                VStack(spacing: 14) {
+                    ForEach(features, id: \.title) { f in
+                        FeatureRow(icon: f.icon, color: f.color, title: f.title, subtitle: f.subtitle)
+                    }
+                }
+                .padding(.top, 32)
+            }
+        }
+    }
+}
+
+private struct FeatureRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(color.opacity(0.15))
+                .frame(width: 44, height: 44)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(color)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
     }
 }
 
 // MARK: - About You
 
 private struct AboutYouPage: View {
+    let page: Int
+    let total: Int
     let onNext: () -> Void
 
     @AppStorage("user_name") private var storedName: String = ""
     @AppStorage("home_sectionOrder") private var sectionOrder: String = HomeSection.defaultOrderString
-    @AppStorage("user_primaryUse") private var primaryUse: String = "Mixed"
+    @AppStorage("user_primaryUse") private var primaryUse: String = ""
 
     @State private var name: String = ""
-    @State private var selectedUse: String = "Mixed"
+    @State private var focuses: Set<String> = []
+    @FocusState private var nameFocused: Bool
 
-    private let useOptions: [(label: String, icon: String, color: Color)] = [
-        ("Time & Billing", "clock.fill", .indigo),
-        ("Mileage",        "car.fill",   .blue),
-        ("Expenses",       "creditcard.fill", .red),
-        ("Mixed",          "square.grid.2x2.fill", .purple),
-    ]
+    private let focusOptions = ["Time Tracking", "Mileage", "Expenses", "Invoicing"]
 
     var body: some View {
-        ZStack {
-            Color(.systemGroupedBackground).ignoresSafeArea()
+        OnboardingScaffold(
+            page: page, total: total,
+            primaryLabel: "Continue",
+            primaryDisabled: name.trimmingCharacters(in: .whitespaces).isEmpty,
+            onPrimary: save
+        ) {
+            VStack(alignment: .leading, spacing: 0) {
+                OnboardingBadge(icon: "person.fill", size: 76)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 22)
 
-            VStack(spacing: 0) {
-                Spacer()
+                Text("A little about you")
+                    .font(.system(.largeTitle, design: .rounded).bold())
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
 
-                Image(systemName: "person.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.indigo)
+                Text("We'll personalize your home screen. Change it anytime in Settings.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
                     .padding(.bottom, 32)
 
-                VStack(spacing: 8) {
-                    Text("Let's personalize\nyour experience")
-                        .font(.largeTitle.bold())
-                        .multilineTextAlignment(.center)
-                    Text("You can change these anytime in Settings.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, 32)
+                Text("YOUR NAME")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+                    .padding(.bottom, 8)
 
-                Spacer()
+                TextField("First name", text: $name)
+                    .font(.body)
+                    .focused($nameFocused)
+                    .submitLabel(.done)
+                    .onSubmit { nameFocused = false }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
 
-                VStack(spacing: 20) {
-                    // Name field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("What should we call you?")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 4)
-                        TextField("First name", text: $name)
-                            .font(.body)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-                    }
+                Text("WHAT DO YOU FOCUS ON?")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+                    .padding(.top, 26)
+                    .padding(.bottom, 10)
 
-                    // Use case picker
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("What do you primarily track?")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 4)
-
-                        VStack(spacing: 0) {
-                            ForEach(useOptions, id: \.label) { option in
-                                Button {
-                                    selectedUse = option.label
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: option.icon)
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(option.color)
-                                            .frame(width: 22)
-                                        Text(option.label)
-                                            .font(.subheadline.weight(.medium))
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        if selectedUse == option.label {
-                                            Image(systemName: "checkmark")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundStyle(.indigo)
-                                        }
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 12)
-                                }
-
-                                if option.label != useOptions.last?.label {
-                                    Divider().padding(.leading, 50)
-                                }
-                            }
-                        }
-                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(focusOptions, id: \.self) { option in
+                        focusChip(option)
                     }
                 }
-                .padding(.horizontal, 32)
 
-                Spacer()
-
-                Button(action: save) {
-                    Text("Continue")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(.indigo, in: RoundedRectangle(cornerRadius: 14))
-                }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 52)
+                Text("Pick any that apply — this orders your home screen.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 10)
+                    .padding(.leading, 4)
             }
         }
         .onAppear {
             name = storedName
-            selectedUse = primaryUse
+            focuses = Set(primaryUse.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
         }
+    }
+
+    private func focusChip(_ option: String) -> some View {
+        let selected = focuses.contains(option)
+        return Button {
+            if selected { focuses.remove(option) } else { focuses.insert(option) }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(selected ? AnyShapeStyle(onboardingIndigo) : AnyShapeStyle(.tertiary))
+                Text(option)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(selected ? onboardingIndigo.opacity(0.12) : Color(.secondarySystemGroupedBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(selected ? onboardingIndigo.opacity(0.45) : .clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func save() {
         storedName = name.trimmingCharacters(in: .whitespaces)
-        primaryUse = selectedUse
-        sectionOrder = HomeSection.orderString(forUse: selectedUse)
+        let ordered = focusOptions.filter { focuses.contains($0) }
+        primaryUse = ordered.joined(separator: ",")
+        sectionOrder = HomeSection.orderString(forFocuses: primaryUse)
+        nameFocused = false
         onNext()
     }
 }
 
-// MARK: - Location
+// MARK: - Permissions
 
-private struct LocationPage: View {
+private struct PermissionsPage: View {
+    let page: Int
+    let total: Int
+    let onSkip: () -> Void
     let onNext: () -> Void
-    @State private var requested = false
+
+    @State private var locationDone = false
+    @State private var notificationsDone = false
 
     var body: some View {
-        OnboardingPageLayout(
-            icon: "location.fill",
-            iconColor: .blue,
-            title: "Mileage Tracking",
-            subtitle: "Allow location access so the app can calculate driving distances automatically when you log a trip. You can always use manual entry instead.",
-            buttonLabel: requested ? "Continue" : "Allow Location",
-            onNext: {
-                if requested {
-                    onNext()
-                } else {
-                    requestLocation()
+        OnboardingScaffold(
+            page: page, total: total,
+            onSkip: onSkip,
+            primaryLabel: "Continue",
+            onPrimary: onNext
+        ) {
+            VStack(spacing: 0) {
+                OnboardingBadge(icon: "checkmark.shield.fill", size: 76)
+                    .padding(.bottom, 22)
+
+                Text("Enable the essentials")
+                    .font(.system(.largeTitle, design: .rounded).bold())
+                    .multilineTextAlignment(.center)
+
+                Text("Optional, but they make tracking effortless. You stay in control.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
+                    .padding(.bottom, 32)
+
+                VStack(spacing: 14) {
+                    PermissionCard(
+                        icon: "location.fill", color: .blue,
+                        title: "Location",
+                        description: "Auto-calculate driving distance when you log a trip.",
+                        done: locationDone,
+                        action: requestLocation
+                    )
+                    PermissionCard(
+                        icon: "bell.fill", color: .orange,
+                        title: "Notifications",
+                        description: "Reminders before quarterly tax deadlines.",
+                        done: notificationsDone,
+                        action: requestNotifications
+                    )
                 }
-            },
-            secondaryLabel: requested ? nil : "Not Now",
-            onSecondary: onNext
-        )
+            }
+        }
     }
 
     private func requestLocation() {
-        let manager = CLLocationManager()
-        manager.requestWhenInUseAuthorization()
-        requested = true
-    }
-}
-
-// MARK: - Notifications
-
-private struct NotificationsPage: View {
-    let onNext: () -> Void
-    @State private var requested = false
-
-    var body: some View {
-        OnboardingPageLayout(
-            icon: "bell.fill",
-            iconColor: .orange,
-            title: "Stay on Top of It",
-            subtitle: "Get reminders for running timers, upcoming tax payment dates, and other helpful nudges. You control what you receive.",
-            buttonLabel: requested ? "Continue" : "Allow Notifications",
-            onNext: {
-                if requested {
-                    onNext()
-                } else {
-                    requestNotifications()
-                }
-            },
-            secondaryLabel: requested ? nil : "Not Now",
-            onSecondary: onNext
-        )
+        CLLocationManager().requestWhenInUseAuthorization()
+        withAnimation { locationDone = true }
     }
 
     private func requestNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
-            DispatchQueue.main.async { requested = true }
+            DispatchQueue.main.async { withAnimation { notificationsDone = true } }
         }
+    }
+}
+
+private struct PermissionCard: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let description: String
+    let done: Bool
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(color.opacity(0.15))
+                .frame(width: 46, height: 46)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(color)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(description).font(.caption).foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            if done {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.green)
+            } else {
+                Button("Enable", action: action)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(color)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(color.opacity(0.12), in: Capsule())
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
 // MARK: - Ready
 
 private struct ReadyPage: View {
+    let page: Int
+    let total: Int
+    let name: String
     let onDone: () -> Void
 
-    var body: some View {
-        OnboardingPageLayout(
-            icon: "checkmark.circle.fill",
-            iconColor: .green,
-            title: "You're All Set",
-            subtitle: "Start by logging your first time entry, trip, or expense. Everything you track flows into Reports automatically.",
-            buttonLabel: "Start Tracking",
-            onNext: onDone
-        )
+    private var greeting: String {
+        let n = name.trimmingCharacters(in: .whitespaces)
+        return n.isEmpty ? "You're all set" : "You're all set, \(n)"
     }
-}
-
-// MARK: - Shared page layout
-
-private struct OnboardingPageLayout: View {
-    let icon: String
-    let iconColor: Color
-    let title: String
-    let subtitle: String
-    let buttonLabel: String
-    let onNext: () -> Void
-    var secondaryLabel: String? = nil
-    var onSecondary: (() -> Void)? = nil
 
     var body: some View {
-        ZStack {
-            Color(.systemGroupedBackground).ignoresSafeArea()
-
+        OnboardingScaffold(page: page, total: total, primaryLabel: "Start Tracking", primaryColor: .green, onPrimary: onDone) {
             VStack(spacing: 0) {
-                Spacer()
+                OnboardingBadge(icon: "checkmark", color: .green, size: 96)
+                    .padding(.top, 24)
+                    .padding(.bottom, 28)
 
-                // Icon
-                Image(systemName: icon)
-                    .font(.system(size: 72))
-                    .foregroundStyle(iconColor)
-                    .padding(.bottom, 40)
+                Text(greeting)
+                    .font(.system(.largeTitle, design: .rounded).bold())
+                    .multilineTextAlignment(.center)
 
-                // Text
-                VStack(spacing: 16) {
-                    Text(title)
-                        .font(.largeTitle.bold())
-                        .multilineTextAlignment(.center)
-
-                    Text(subtitle)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-
-                Spacer()
-
-                // Buttons
-                VStack(spacing: 12) {
-                    Button(action: onNext) {
-                        Text(buttonLabel)
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(iconColor, in: RoundedRectangle(cornerRadius: 14))
-                    }
-
-                    if let secondaryLabel, let onSecondary {
-                        Button(secondaryLabel, action: onSecondary)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 52)
+                Text("Log your first time entry, trip, or expense — it all flows into Reports automatically.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 12)
+                    .padding(.horizontal, 8)
             }
         }
     }

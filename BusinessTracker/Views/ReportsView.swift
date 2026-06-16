@@ -467,7 +467,7 @@ struct ReportsView: View {
     private func buildReportPDFData() -> ReportPDFData {
         ReportPDFData(
             rangeLabel: rangeLabel,
-            userName: userName,
+            userName: userFullName(),
             totalHours: totalHours,
             totalEarnings: totalEarnings,
             totalMiles: totalMiles,

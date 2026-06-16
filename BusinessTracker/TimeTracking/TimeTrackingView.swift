@@ -7,8 +7,8 @@ struct TimeTrackingView: View {
 
     @State private var showLogTime = false
     @State private var showTimer = false
-    @State private var showPresets = false
     @State private var showSettings = false
+    @State private var showHistory = false
     @State private var entryToEdit: TimeEntry?
     @State private var pendingDelete: ([TimeEntry], IndexSet)?
 
@@ -78,13 +78,12 @@ struct TimeTrackingView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "person.crop.circle")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showPresets = true } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
+                    Button("History") { showHistory = true }
+                        .disabled(entries.isEmpty)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showLogTime = true } label: {
@@ -99,14 +98,14 @@ struct TimeTrackingView: View {
                 TimerSheet()
                     .presentationDetents([.medium,.large])
             }
-            .sheet(isPresented: $showPresets) {
-                PresetsView()
-            }
             .sheet(item: $entryToEdit) { entry in
                 TimeEntryEditView(entry: entry)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showHistory) {
+                TimeHistoryView()
             }
             .overlay(alignment: .bottomTrailing) {
                 if !timerState.isRunning {
@@ -233,9 +232,9 @@ struct ActiveTimerCard: View {
     }
 }
 
-// MARK: - Time Entry Row
+// MARK: - Time Entry Row (shared with TimeMonthDetailView)
 
-private struct TimeEntryRow: View {
+struct TimeEntryRow: View {
     let entry: TimeEntry
 
     var body: some View {

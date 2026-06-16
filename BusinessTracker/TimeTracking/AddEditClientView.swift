@@ -13,6 +13,7 @@ struct AddEditClientView: View {
     @State private var name: String = ""
     @State private var companyName: String = ""
     @State private var billingAddress: String = ""
+    @State private var billingAddress2: String = ""
     @State private var email: String = ""
     @State private var phone: String = ""
     @State private var photoItem: PhotosPickerItem?
@@ -34,7 +35,7 @@ struct AddEditClientView: View {
                         PhotosPicker(selection: $photoItem, matching: .images) {
                             Text(photoData == nil ? "Add Photo" : "Change Photo")
                                 .font(.subheadline)
-                                .foregroundStyle(.indigo)
+                                .foregroundStyle(.teal)
                         }
                         .onChange(of: photoItem) { _, item in
                             Task {
@@ -66,14 +67,17 @@ struct AddEditClientView: View {
                 // MARK: Billing details (for invoices)
                 Section {
                     TextField("Company name (optional)", text: $companyName)
-                    TextField("Billing address", text: $billingAddress, axis: .vertical)
-                        .lineLimit(2...4)
+                    AddressEntryField(label: "", line1: $billingAddress, line2: $billingAddress2)
                     TextField("Email", text: $email)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Phone", text: $phone)
                         .keyboardType(.phonePad)
+                        .onChange(of: phone) { _, newValue in
+                            let formatted = formatPhoneNumber(newValue)
+                            if formatted != newValue { phone = formatted }
+                        }
                 } header: {
                     Text("Billing Details")
                 } footer: {
@@ -147,6 +151,7 @@ struct AddEditClientView: View {
             photoData = existing.photoData
             companyName = existing.companyName
             billingAddress = existing.billingAddress
+            billingAddress2 = existing.billingAddress2
             email = existing.email
             phone = existing.phone
         } else {
@@ -170,6 +175,7 @@ struct AddEditClientView: View {
         client.photoData = photoData
         client.companyName = companyName.trimmingCharacters(in: .whitespaces)
         client.billingAddress = billingAddress.trimmingCharacters(in: .whitespaces)
+        client.billingAddress2 = billingAddress2.trimmingCharacters(in: .whitespaces)
         client.email = email.trimmingCharacters(in: .whitespaces)
         client.phone = phone.trimmingCharacters(in: .whitespaces)
         dismiss()

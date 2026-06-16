@@ -68,19 +68,25 @@ struct MileageView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "person.crop.circle")
                     }
                 }
-                ToolbarSpacer(placement: .topBarLeading)
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("History") { showHistory = true }
                         .disabled(trips.isEmpty)
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showLogTrip = true } label: {
-                        Image(systemName: "plus")
-                    }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Button { showLogTrip = true } label: {
+                    Image(systemName: "plus")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 58, height: 58)
+                        .background(.blue, in: Circle())
+                        .shadow(color: .blue.opacity(0.35), radius: 10, x: 0, y: 4)
                 }
+                .padding(.trailing, 20)
+                .padding(.bottom, 20)
             }
             .sheet(isPresented: $showLogTrip) {
                 LogTripView()

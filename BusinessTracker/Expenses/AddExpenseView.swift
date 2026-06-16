@@ -8,6 +8,9 @@ struct AddExpenseView: View {
     @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
     @Query(sort: \ExpensePreset.sortOrder) private var presets: [ExpensePreset]
 
+    /// Optional preset to pre-fill on open (used by the Expenses speed-dial).
+    var prefillPreset: ExpensePreset? = nil
+
     @State private var date: Date = .now
     @State private var amountText: String = ""
     @State private var category: String = Expense.categories[0]
@@ -144,6 +147,7 @@ struct AddExpenseView: View {
             .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Add Expense")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { if let prefillPreset { applyPreset(prefillPreset) } }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

@@ -38,16 +38,23 @@ struct ClientsView: View {
                     )
                 }
             }
+            .overlay(alignment: .bottomTrailing) {
+                Button { showAddClient = true } label: {
+                    Image(systemName: "plus")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 58, height: 58)
+                        .background(.teal, in: Circle())
+                        .shadow(color: .teal.opacity(0.35), radius: 10, x: 0, y: 4)
+                }
+                .padding(.trailing, 20)
+                .padding(.bottom, 20)
+            }
             .navigationTitle("Clients")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                    }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showAddClient = true } label: {
-                        Image(systemName: "plus")
+                        Image(systemName: "person.crop.circle")
                     }
                 }
             }
@@ -136,10 +143,10 @@ struct ClientAvatar: View {
                     .scaledToFill()
             } else {
                 ZStack {
-                    Color.indigo.opacity(0.15)
+                    Color.teal.opacity(0.15)
                     Text(initials)
                         .font(.system(size: size * 0.35, weight: .semibold))
-                        .foregroundStyle(.indigo)
+                        .foregroundStyle(.teal)
                 }
             }
         }

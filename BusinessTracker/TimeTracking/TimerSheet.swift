@@ -77,22 +77,29 @@ struct TimerSheet: View {
                             // Preset quick-start buttons
                             if !presets.isEmpty {
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 8) {
+                                    HStack(spacing: 10) {
                                         ForEach(presets) { preset in
+                                            let isActive = activePreset?.persistentModelID == preset.persistentModelID
                                             Button {
                                                 selectedClient = preset.client
                                                 selectedProject = preset.project
                                                 activePreset = preset
                                             } label: {
-                                                Text(preset.name)
-                                                    .font(.caption.bold())
-                                                    .padding(.horizontal, 12)
-                                                    .padding(.vertical, 6)
-                                                    .background(activePreset?.persistentModelID == preset.persistentModelID
-                                                                ? AnyShapeStyle(.indigo.opacity(0.2))
-                                                                : AnyShapeStyle(.regularMaterial), in: Capsule())
+                                                HStack(spacing: 6) {
+                                                    Image(systemName: "bolt.fill")
+                                                        .font(.footnote)
+                                                    Text(preset.name)
+                                                        .font(.body.weight(.semibold))
+                                                        .lineLimit(1)
+                                                }
+                                                .padding(.horizontal, 18)
+                                                .padding(.vertical, 12)
+                                                .background(isActive
+                                                            ? AnyShapeStyle(.indigo.opacity(0.2))
+                                                            : AnyShapeStyle(.regularMaterial), in: Capsule())
+                                                .overlay(Capsule().strokeBorder(isActive ? Color.indigo.opacity(0.5) : .clear, lineWidth: 1.5))
                                             }
-                                            .foregroundStyle(activePreset?.persistentModelID == preset.persistentModelID ? .indigo : .primary)
+                                            .foregroundStyle(isActive ? .indigo : .primary)
                                         }
                                     }
                                     .padding(.horizontal, 2)

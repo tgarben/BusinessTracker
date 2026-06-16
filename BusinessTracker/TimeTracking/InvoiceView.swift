@@ -541,7 +541,7 @@ struct InvoiceDetailView: View {
                             }
                         } else {
                             Button {
-                                pdfURL = makeInvoicePDF(invoice: invoice, userName: userName)
+                                pdfURL = makeInvoicePDF(invoice: invoice, userName: userFullName())
                             } label: {
                                 Image(systemName: "square.and.arrow.up")
                             }
@@ -684,7 +684,7 @@ private struct MarkPaidSheet: View {
 
 /// Standardized business "from" info, read from the same UserDefaults keys as Settings.
 struct BusinessInfo {
-    var name: String, address: String, phone: String, email: String, website: String, taxID: String
+    var name: String, address: String, address2: String, phone: String, email: String, website: String, taxID: String
 
     static func load(fallbackName: String) -> BusinessInfo {
         let d = UserDefaults.standard
@@ -692,6 +692,7 @@ struct BusinessInfo {
         return BusinessInfo(
             name: name.isEmpty ? fallbackName : name,
             address: d.string(forKey: "business_address") ?? "",
+            address2: d.string(forKey: "business_address2") ?? "",
             phone: d.string(forKey: "business_phone") ?? "",
             email: d.string(forKey: "business_email") ?? "",
             website: d.string(forKey: "business_website") ?? "",
@@ -919,6 +920,10 @@ private struct InvoiceFirstPageLayout: View {
                             .font(.system(size: 10)).foregroundColor(Color(white: 0.45))
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    if !business.address2.isEmpty {
+                        Text(business.address2)
+                            .font(.system(size: 10)).foregroundColor(Color(white: 0.45))
+                    }
                     ForEach(business.contactLines, id: \.self) { line in
                         Text(line).font(.system(size: 10)).foregroundColor(Color(white: 0.45))
                     }
@@ -953,6 +958,9 @@ private struct InvoiceFirstPageLayout: View {
                     if let addr = invoice.client?.billingAddress, !addr.isEmpty {
                         Text(addr).font(.system(size: 10)).foregroundColor(Color(white: 0.45))
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let addr2 = invoice.client?.billingAddress2, !addr2.isEmpty {
+                        Text(addr2).font(.system(size: 10)).foregroundColor(Color(white: 0.45))
                     }
                     if let email = invoice.client?.email, !email.isEmpty {
                         Text(email).font(.system(size: 10)).foregroundColor(Color(white: 0.45))

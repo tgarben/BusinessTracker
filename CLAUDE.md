@@ -48,7 +48,7 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 
 **Current tabs:** Home · Time · Mileage · Expenses · Clients (5 tabs, at iOS limit)
 
-- **Settings** is accessible via a ⚙️ gear icon in the **top-left toolbar on every screen** — opens as a sheet
+- **Settings** is accessible via a **profile icon** (`person.crop.circle`) in the **top-left toolbar on every screen** — opens as a sheet (alone on the left; other actions go top-right)
 - **Reports** is accessible via a `chart.bar` toolbar button on the **Home screen** — opens as a sheet with drag indicator
 - Tab order reflects daily-use priority: Home first, then the three active tracking tabs, Clients last
 
@@ -99,8 +99,9 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - `ActiveTimerCard` is `internal` (not `private`) so both `HomeView` and `TimeTrackingView` can use it.
 
 **`@AppStorage` keys for Home:**
-- `user_name` — first name for greeting
-- `user_primaryUse` — "Mixed" | "Time & Billing" | "Mileage" | "Expenses" — sets default section order
+- `user_name` — first name for greeting (Home greeting uses first name ONLY)
+- `user_lastName` — last name; appears on invoices + data exports only, never the Home greeting. `userFullName()` free function in `SettingsView.swift` builds "First Last" from UserDefaults for non-View code (invoice PDF, Reports PDF, CSV header).
+- `user_primaryUse` — **"App Focus"** in Settings: now **multi-select**, comma-separated rawValues from `["Time Tracking","Mileage","Expenses","Invoicing"]` (tappable chips, not a single-select picker). Drives Home section order via `HomeSection.orderString(forFocuses:)` — tailors the order only when exactly one focus is selected, else uses the balanced default. (Onboarding still writes a single legacy value via `orderString(forUse:)`, which remains for back-compat and maps "Time & Billing"→"Time Tracking".)
 - `home_sectionOrder` — comma-separated `HomeSection` rawValues
 - `home_quickActionOrder` — comma-separated `QuickAction` rawValues (display order)
 - `home_quickActionEnabled` — comma-separated enabled `QuickAction` rawValues
@@ -121,10 +122,11 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
   - Stop → auto-saves immediately with known client/project/rate/notes template
   - Animated ✓ confirmation shown ~1.8s then sheet auto-dismisses
   - No post-stop form unless user taps into the saved entry to edit
-- **Presets** (`TimePreset`): named combos of client + project + optional rate override + optional notes template. Managed from `⋯` button in `TimeTrackingView` (trailing toolbar, next to `+`) or the prominent "Manage Presets" / "Create a Preset" button in `TimerSheet` — both open `PresetsView`. Active preset chip is highlighted indigo in the timer sheet. Reorderable.
+- **Presets** (`TimePreset`): named combos of client + project + optional rate override + optional notes template. Managed from **Settings → Presets & Quick-Fill → Time Presets** (presented as a sheet) or the prominent "Manage Presets" / "Create a Preset" button in `TimerSheet` — both open `PresetsView`. (The old `⋯` toolbar button on `TimeTrackingView` was removed.) Preset chips also appear in `LogTimeView` and `TimerSheet`; active preset chip is highlighted indigo. Reorderable.
 - **Clients & Projects** managed from the Clients tab (not Settings)
 - **Tap any entry** to open `TimeEntryEditView` — edit all fields including notes
 - **Week summary card** at top of Time Tracking screen — hidden when no entries exist (only `ContentUnavailableView` shown)
+- **History button** (top-right toolbar — app-wide convention: profile icon alone top-left, actions top-right) → `TimeHistoryView`: months listed as rows with month name bold + hours badge (indigo) + entry count + earnings → `TimeMonthDetailView`: that month's entries with summary card + grouped-by-day list, tap to edit (`TimeEntryEditView`), swipe to delete. `TimeEntryRow` is `internal` (shared by `TimeTrackingView` + `TimeMonthDetailView`).
 - **Swipe to delete** shows confirmation dialog before deleting
 
 ## Mileage Tracking — key decisions & current state
@@ -152,7 +154,8 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Legacy migration:** old `receiptImageData: Data?` field is preserved on the model. `ExpenseEditView` migrates it into `receiptImagesData` on first open and clears the old field on save.
 - **Amount field:** displays a `$` prefix label beside the text input in both Add and Edit views. Parsed via `Double(string:)` on save.
 - **Tap any entry** to open `ExpenseEditView`
-- **Expense presets:** template chips at the top of `AddExpenseView` (`ExpensePreset`) pre-fill category, amount (when fixed), and notes. Managed in Settings → Expense Presets (`ExpensePresetsView`).
+- **Expense presets:** template chips at the top of `AddExpenseView` (`ExpensePreset`) pre-fill category, amount (when fixed), and notes. Managed in Settings → Expense Presets (`ExpensePresetsView`). `AddExpenseView(prefillPreset:)` opens pre-filled.
+- **Speed-dial FAB:** `ExpensesView` has a floating red **+** button bottom-right (mirrors the Time tab's floating play button). Tapping it springs open a speed-dial of expense-preset shortcuts + a "New Expense" option; the + rotates 45° to an ✕, with a tap-scrim to dismiss. Default: a preset opens the pre-filled Add Expense form. With `@AppStorage("expense_presetInstantSave")` on (Settings → Presets & Quick-Fill → "Instant-Log Expense Presets"), tapping a fixed-amount preset saves immediately; presets without a fixed amount still open the form. If no presets exist, the FAB just opens a blank Add Expense.
 - **Month summary card** shows total spend + transaction count — hidden when no expenses exist (only `ContentUnavailableView` shown)
 - **Swipe to delete** shows confirmation dialog before deleting
 - `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` must be in Info.plist for camera/photo on real device
@@ -175,7 +178,8 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 
 - **Three info sources combine into each invoice:**
   1. **Your business info** — standardized in Settings → Business Information + Invoicing Defaults (`@AppStorage` keys `business_name`, `business_address`, `business_phone`, `business_email`, `business_website`, `business_taxID`, `business_defaultTaxRate`, `business_defaultPaymentTerms`, `business_acceptedPayments`, `business_paymentInstructions`). Rendered as the "from" header + tax ID + payment defaults.
-  2. **Customer info** — from the `Client` (`name`, `companyName`, `billingAddress`, `email`, `phone`), edited in `AddEditClientView` → Billing Details. Rendered as "BILL TO".
+  2. **Customer info** — from the `Client` (`name`, `companyName`, `billingAddress`, `billingAddress2`, `email`, `phone`), edited in `AddEditClientView` → Billing Details. Rendered as "BILL TO".
+- **Address entry:** business address (Settings) and client billing address use the shared **`AddressEntryField`** (`Mileage/AddressEntryField.swift`) — an editable street line with a 🔍 button that opens the same `AddressSearchView` MapKit autocomplete used by Mileage (fills line 1 via `fullAddress(_:)`), plus a second line for Apt/Suite/Unit. Business line 2 = `@AppStorage("business_address2")`; client line 2 = `Client.billingAddress2`. Both render on the invoice PDF (`BusinessInfo.address2` + `client.billingAddress2`).
   3. **Per-invoice data** — entered in `CreateInvoiceContent`.
 - **Line items = time entries + manual `InvoiceLineItem`s.** Time-entry billing (select unbilled entries) is unchanged; manual line items add arbitrary products/services with description, quantity, unit price. The PDF merges both into one table via `invoicePDFRows(for:)` → `[InvoicePDFRow]`.
 - **Totals:** `subtotal` → minus `discountAmount` → `discountedSubtotal` → plus `taxAmount` (`taxRate%`) → `total`. New invoices pre-fill tax rate / terms / accepted payments / instructions from the business defaults (editable per invoice).
@@ -207,12 +211,12 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Business Information** section (name, address, phone, email, website, tax ID/EIN) + **Invoicing Defaults** (payment terms picker, default sales tax %, accepted payments, payment instructions) — all `@AppStorage`, pulled into invoices. `businessField(...)` helper renders the labeled multiline text rows.
 - **Presets & Quick-Fill section** links to Trip Purposes, Mileage Presets, and Expense Presets editors.
 - Accessed via gear icon (top-left toolbar) on every screen — not a tab
-- **Personalization:** user name (used in Home greeting), primary use case picker (resets Home section order to use-case default)
+- **Personalization:** first name (Home greeting), last name (invoices/exports only), and **App Focus** — multi-select chips ("Time Tracking / Mileage / Expenses / Invoicing") replacing the old single-select Primary Use picker; resets Home section order
 - **Rates & Defaults:** IRS mileage rate (live, persisted), default hourly rate
 - **Fuel:** MPG + gas price (shared with Reports fuel analysis card)
 - **Tax Information:** business structure picker, SE tax rate, income bracket rate
 - **Quarterly Tax Due Dates:** all four IRS estimated payment deadlines shown with period labels; next upcoming date highlighted in orange with days-until countdown
-- **Data Export:** "Export All Data (CSV)" button — generates time entries + mileage + expenses as a single CSV, shares via `UIActivityViewController`. Mileage rows export the **full address** (`startAddressForExport`/`endAddressForExport`) plus a **Stops** column (waypoints) — accountants need real addresses, not just place names. Fields are RFC-4180 quote-escaped via `csvField(_:)` so commas in addresses/notes survive.
+- **Data Export:** scoped CSV exports — **Export All Data** plus per-category **Time Entries / Mileage / Expenses** buttons, each limited to a selected **date range** (`ExportRange`: All Time / This Month / This Quarter / This Year / Custom with from/to `DatePicker`s). `exportBounds`/`inExportRange(_:)` filter every row builder by `date`; the range is written into the CSV header (`Range,…`) and the filename (`Freelanced_<Scope>_<Range>_<date>.csv`). `ExportScope` + `buildCSV(_:)` compose from `timeRows()`/`mileageRows()`/`expenseRows()` (each `[String]`) on top of `csvHeaderRows()` (name + export date + range). Mileage rows export the **full address** (`startAddressForExport`/`endAddressForExport`) plus a **Stops** column (waypoints). Fields are RFC-4180 quote-escaped via `csvField(_:)`.
 - **App:** currency placeholder, app version from bundle
 - Keyboard dismisses on scroll (`scrollDismissesKeyboard(.immediately)`)
 - **Note:** Clients & Projects management was removed from Settings — it now lives entirely in the Clients tab
@@ -232,11 +236,14 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 
 ---
 
-## Onboarding — current state
+## Onboarding — current state (redesigned)
 
-5 pages: Welcome → About You → Location → Notifications → Ready
+4 pages: Welcome → About You → Permissions → Ready. Branded redesign — `OnboardingScaffold` (animated capsule progress + optional Skip on top, `ScrollView` content, pinned bottom buttons, respects safe areas), `OnboardingBadge` (indigo-gradient rounded-square app-icon-style glyph).
 
-- **About You (page 2):** asks for first name + primary use case (4 options with checkmark selection). Sets `user_name`, `user_primaryUse`, and `home_sectionOrder` AppStorage keys.
+- **Welcome:** "Welcome to Freelanced" + feature-highlight rows (time/mileage/expenses/invoices).
+- **About You:** first name field + **App Focus multi-select chips** (Time Tracking / Mileage / Expenses / Invoicing) — matches Settings. Writes `user_name`, comma-separated `user_primaryUse`, and `home_sectionOrder` via `HomeSection.orderString(forFocuses:)`. Continue disabled until a name is entered.
+- **Permissions:** combined Location + Notifications cards, each with Enable → checkmark; Skip available.
+- **Ready:** green success screen, greets by name.
 - Gated by `@AppStorage("hasCompletedOnboarding")` — set to `false` in UserDefaults to re-trigger for testing.
 
 ---
@@ -278,7 +285,7 @@ Applied to: `TimeTrackingView`, `MileageView`, `MileageMonthDetailView`, `Expens
 
 - **Title row:** entity name (bold semibold) + colored amount/hours badge (capsule pill) on the right
 - **Detail row:** small icon column (10–12pt) + label text + Spacer + prominent value (`.subheadline.weight(.medium)`)
-- **Color coding:** Time = indigo, Mileage = blue, Expenses = red, Income = green, Clients = indigo/green
+- **Color coding:** Time = indigo, Mileage = blue, Expenses = red, Income/money = green, Clients = teal (avatar + FAB; hours within a client stay indigo and earnings stay green per the time/money semantics)
 - Notes always last, `.caption`, `.tertiary`, `lineLimit(1)`
 - `.padding(.vertical, 4)` on all rows
 - **History list rows** (Mileage + Expenses): month name as `.headline` primary text, colored badge on the right, secondary info (count + amount) below — not full summary cards
@@ -310,7 +317,9 @@ BusinessTracker/
 │   └── HomeView.swift               (HomeSection enum, QuickAction enum, HomeSectionCard, HomeLayoutEditor)
 ├── TimeTracking/
 │   ├── TimerState.swift
-│   ├── TimeTrackingView.swift       (also contains ActiveTimerCard — internal, shared with HomeView)
+│   ├── TimeTrackingView.swift       (also contains ActiveTimerCard + TimeEntryRow — internal, shared)
+│   ├── TimeHistoryView.swift        (months list → TimeMonthDetailView)
+│   ├── TimeMonthDetailView.swift    (month entries + summary card, grouped by day)
 │   ├── TimerSheet.swift
 │   ├── LogTimeView.swift
 │   ├── TimeEntryEditView.swift
@@ -383,8 +392,8 @@ _(Shipped: Jack's full feedback batch — Reports PDF export, mileage deduction 
 - `ContentUnavailableView` for all empty states
 - Entries grouped by date, swipe-to-delete on all lists (with confirmation dialog)
 - All sheets use `NavigationStack` with Cancel/Save (or Done) toolbar items
-- Gear icon (⚙️) always top-left toolbar, opens Settings as a sheet, always its own separate Liquid Glass pill
-- `ToolbarSpacer(placement: .topBarLeading)` separates the gear from adjacent leading toolbar items to prevent iOS 26 Liquid Glass pill grouping
+- **Toolbar layout convention:** profile icon (`person.crop.circle`, opens Settings sheet) sits **alone** in the top-left on every tab; all other actions (History, presets ⋯, +) live in the top-right. History is the right-edge button on Time/Mileage/Expenses.
+- `ToolbarSpacer(placement:)` separates grouped trailing items (e.g. presets ⋯ and History on Time) to prevent iOS 26 Liquid Glass pill grouping
 - Home section cards use `.listStyle(.plain)` with `Color(.systemGroupedBackground)` — each section is a single list row for reliable drag-to-reorder
 
 ---
@@ -417,14 +426,17 @@ _(Shipped: Jack's full feedback batch — Reports PDF export, mileage deduction 
 - Shows the next due date prominently (small) plus all four quarters (medium), next one highlighted orange with a day countdown
 - `QuarterlyTaxDates.upcoming()` duplicates the date logic from `SettingsView` (widget can't import the app). Timeline refreshes at next midnight so "next due" + countdown stay current. No App Group / no deep link.
 
-**Live Activity (active):**
+**Live Activity (active, branded redesign):**
 - Kind: `FreelancedLiveActivity` in `FreelancedWidget/FreelancedLiveActivity.swift`
 - Attributes: `TimerActivityAttributes` (`clientName`, `projectName`); `ContentState` (`startDate: Date`)
-- Dynamic Island: compact (indigo timer icon + `Text(timerInterval:)` counter), expanded (client/project + elapsed + tap hint), minimal (icon)
-- Lock screen: `TimerLockScreenView` — icon, client/project stack, live counter
+- **Design:** app-icon-style badge (`TimerAppBadge` — indigo rounded-square + white `stopwatch.fill`), a red-dot "TRACKING TIME" label (`TrackingLabel`), rounded monospaced indigo timer (`liveTimer`), indigo-tinted gradient container background. Brand colors `brandIndigo`/`brandIndigoDark` defined at top of file.
+- Lock screen `TimerLockScreenView`: badge · tracking label + client/project · live timer + "Freelanced" wordmark.
+- Dynamic Island: compact (stopwatch + timer), minimal (stopwatch). **Expanded uses ONLY the `.bottom` region** for the full banner (badge + tracking label/client/project on the left, timer + "Freelanced" on the right) — the narrow leading/trailing regions clip long text (they hand content its natural size then truncate, so `minimumScaleFactor` never engages), whereas `.bottom` spans the full island width.
+- **Informational only** — no Stop button (deliberately reserved to the app to avoid accidental stops). Tapping the activity opens the app via `widgetURL(freelanced://startTimer)`, where the timer is stopped. (A Stop button was built then removed; if revisited it needs a shared App-Intent target + persisting the running client/project to the App Group.)
 - Started by `TimerState.startLiveActivity()` in the **main app process only** — widget extensions cannot call `Activity.request()`
 - Ended by `TimerState.endLiveActivity()` on timer stop
 - `NSSupportsLiveActivities` + `NSSupportsLiveActivitiesFrequentUpdates` must be `true` in `BusinessTracker/Info.plist`
+- **Future:** drop a logo image into `FreelancedWidget/Assets.xcassets` to replace the `stopwatch.fill` glyph in `TimerAppBadge` with the real app mark.
 
 **Widget timer start flow:**
 - Tapping any widget action calls `.widgetURL(action.deepLink)` → app opens → `handleWidgetDeepLink(_:)` routes to correct sheet
