@@ -8,7 +8,7 @@ A SwiftUI app for small business owners and contract workers to track time, mile
 - **UI:** SwiftUI
 - **Persistence:** SwiftData + CloudKit (private database, syncs across devices when signed into iCloud)
 - **Target:** iOS 26 minimum (use iOS 26 APIs freely)
-- **Future platforms:** iPadOS, macOS (not yet)
+- **Future platforms:** macOS (not yet). **iPad: supported** — `ContentView` branches on `horizontalSizeClass`: iPhone (`.compact`) uses the bottom `TabView`; iPad (`.regular`) uses a `NavigationSplitView` (sidebar + detail). See the iPad section.
 - **Git:** Local only (`main` branch), no remote configured
 
 ## Project location
@@ -83,7 +83,39 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Known limitation:** CloudKit does not support `Decimal` natively — if sync issues arise, monetary fields may need to be stored as `Double` (cents as Int) with a migration plan
 - Sync only works on a real device signed into iCloud; simulator always uses the local fallback
 
+### Settings / business-info sync (NSUbiquitousKeyValueStore)
+
+SwiftData models sync via CloudKit, but **business info, profile, and financial defaults live in `@AppStorage` (`UserDefaults.standard`), which is device-local.** `Settings/CloudKeyValueSync.swift` bridges a fixed allow-list of those keys to `NSUbiquitousKeyValueStore` (iCloud key-value store) so they follow the user across devices.
+
+- **`CloudKeyValueSync.start()`** is called from `BusinessTrackerApp` on both the main `.task` and the onboarding `.task` (so a 2nd device pre-fills onboarding from iCloud). Idempotent.
+- **Direction:** observes `NSUbiquitousKeyValueStore.didChangeExternallyNotification` (pull iCloud→`UserDefaults`, which `@AppStorage` re-renders from) and `UserDefaults.didChangeNotification` (push local→iCloud). An `isApplyingRemoteChange` guard prevents feedback loops.
+- **Launch merge:** pull (remote wins on conflict) then push (uploads local-only keys). Keys never set by the user are absent from `UserDefaults` (still at `@AppStorage` default) so they're skipped — a local default never clobbers a remote value.
+- **Synced keys** (`CloudKeyValueSync.syncedKeys`): `user_name`, `user_lastName`, `user_primaryUse`; all `business_*` (incl. invoicing defaults); `mileage_ratePerMile`, `default_hourlyRate`, `report_mpg`, `report_gasPrice`, `tax_selfEmploymentRate`, `tax_incomeBracketRate`, `tax_businessStructure`; `mileage_purposePresets`, `mileage_favoriteAddresses`.
+- **Intentionally NOT synced** (device-specific): `home_*` layout/section order, widget config, notification toggles (`tax_remindersEnabled`, `expense_presetInstantSave`), `hasCompletedOnboarding`.
+- **Entitlement:** `com.apple.developer.ubiquity-kvstore-identifier = $(TeamIdentifierPrefix)com.garbenTechnologies.BusinessTracker` added to `BusinessTracker.entitlements`. Like CloudKit, only works on a real device signed into iCloud.
+- **To add a new synced setting:** append its key to `CloudKeyValueSync.syncedKeys`. Only property-list scalars (String/Double/Bool/Data) sync cleanly.
+
 ---
+
+## iPad layout — current state & notes
+
+- **Navigation:** `ContentView` uses a single plain `TabView` (no size-class branching, no `NavigationSplitView`). On iPhone this renders the bottom tab bar; on iPad iOS 26 the **same** `TabView` automatically renders the App Store-style floating **top tab bar**. We deliberately do **not** apply `.tabViewStyle(.sidebarAdaptable)` — that would force an iPad sidebar, which was tried and rejected in favor of the top tab bar.
+- **`AppSection` enum** (`ContentView.swift`) is the single source of truth for the five destinations (`home/mileage/time/expenses/clients`) — `title`, `icon`, and a `@ViewBuilder destination`. The `TabView` `ForEach`es over it.
+- Each section root (`HomeView`, `MileageView`, …) wraps itself in its own `NavigationStack`; the `TabView` preserves per-tab state, so drill-down nav and scroll position survive tab switches.
+- Shared `.sheet`s (timer, log time/trip, add expense, create invoice) and the `pendingWidgetAction` routing live on the `TabView`, so widget/Shortcut deep links work identically on both idioms.
+- **Layout polish for wide screens:** Home Quick Actions grid uses `GridItem(.adaptive(minimum: 150))` (flows to 5 columns on iPad, stays 2-up on iPhone). Onboarding (`OnboardingScaffold`) is capped at `maxWidth: 540` centered so fields don't stretch edge-to-edge.
+- **Timer sheet detents:** `TimerSheet` owns its own detents via the private `PhoneSheetDetents` modifier: **iPhone gets `[.medium, .large]`; iPad gets NO detents** so it presents as the standard centered form sheet like every other sheet (forcing `presentationDetents` on iPad produced an odd partial-height card). The three callers (`ContentView`, `HomeView`, `TimeTrackingView`) just present `TimerSheet()` with no detents of their own — don't re-add detents at the call site.
+  - **Auto-expand to `.large` (iPhone):** `PhoneSheetDetents` takes a `selection` binding (`sheetDetent`). `TimerSheet.syncDetent()` sets it to `.large` when `prefersLargeDetent` (not running + project picker visible, i.e. a client-with-projects / preset is selected and the form is tall enough to clip at `.medium`), else `.medium`. Driven by `.onAppear` + `.onChange` of `selectedClient`/`selectedProject`/`timerState.isRunning`. The user can still drag down manually.
+  - **GOTCHA:** the modifier keys off `UIDevice.current.userInterfaceIdiom == .phone`, **NOT `horizontalSizeClass`**. Content inside a *presented sheet* on iPad reports a `.compact` horizontal size class (the sheet container is a narrow compartment), so a size-class check wrongly applies the phone detents on iPad. Use the device idiom for "is this an iPad" decisions that are read from inside a sheet.
+- **Future iPad polish (optional):** true two-column drill-down (master/detail) within Clients/history, multi-window. Not done.
+
+### Onboarding prefill from iCloud (new-device experience)
+
+When a returning user installs on a new device, onboarding pre-fills from the iCloud-synced settings (see `CloudKeyValueSync`) so they don't re-type everything:
+- `BusinessTrackerApp` calls `CloudKeyValueSync.start()` on the onboarding `.task` too, which pulls iCloud key-values into `UserDefaults`.
+- **`BusinessInfoPage`** binds its `TextField`s directly to the `business_*` `@AppStorage` keys, so values appear live as soon as iCloud delivers them.
+- **`AboutYouPage`** seeds local `@State` from the stored keys in `.onAppear`, **and** has `.onChange` observers (`storedName`/`storedLastName`/`primaryUse`) that re-seed any field the user hasn't touched yet — needed because `NSUbiquitousKeyValueStore` downloads asynchronously and values can land *after* the page first appears.
+- **`iCloudPrefillBadge`** (a small "Filled in from your iCloud account" pill) shows on About You when a name was restored, and on Business when any business field was restored.
 
 ## Home Screen — key decisions & current state
 
@@ -239,11 +271,12 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 
 ## Onboarding — current state (redesigned)
 
-4 pages: Welcome → About You → Permissions → Ready. Branded redesign — `OnboardingScaffold` (animated capsule progress + optional Skip on top, `ScrollView` content, pinned bottom buttons, respects safe areas), `OnboardingBadge` (indigo-gradient rounded-square app-icon-style glyph).
+5 pages: Welcome → About You → Your Business → Permissions → Ready. Branded redesign — `OnboardingScaffold` (animated capsule progress + optional Skip on top, `ScrollView` content with `.scrollDismissesKeyboard(.interactively)`, pinned bottom buttons, respects safe areas), `OnboardingBadge` (indigo-gradient rounded-square app-icon-style glyph).
 
 - **Welcome:** "Welcome to Freelanced" + feature-highlight rows (time/mileage/expenses/invoices).
-- **About You:** first name field + **App Focus multi-select chips** (Time Tracking / Mileage / Expenses / Invoicing) — matches Settings. Writes `user_name`, comma-separated `user_primaryUse`, and `home_sectionOrder` via `HomeSection.orderString(forFocuses:)`. Continue disabled until a name is entered.
-- **Permissions:** combined Location + Notifications cards, each with Enable → checkmark; Skip available.
+- **About You:** first + last name fields (last name labeled "appears on invoices and data exports") + **App Focus multi-select chips** (Time Tracking / Mileage / Expenses / Invoicing) — matches Settings. Writes `user_name`, `user_lastName`, comma-separated `user_primaryUse`, and `home_sectionOrder` via `HomeSection.orderString(forFocuses:)`. Continue disabled until a first name is entered.
+- **Your Business (skippable):** business name, address (shared `AddressEntryField` w/ line 2), phone (auto-formatted), email, website, tax ID — writes the same `business_*` `@AppStorage` keys Settings uses, so invoices work out of the box. Skip advances.
+- **Permissions (skippable):** Location, Camera (receipt photos, `AVCaptureDevice.requestAccess`), Notifications cards, each Enable → checkmark. No Photos card — `PhotosPicker`/PHPicker needs no permission.
 - **Ready:** green success screen, greets by name.
 - Gated by `@AppStorage("hasCompletedOnboarding")` — set to `false` in UserDefaults to re-trigger for testing.
 
@@ -389,7 +422,7 @@ FreelancedWidget/                    (WidgetKit extension target)
 - **Lock screen widgets** — deferred until Firebase Blaze (or equivalent server) is justified by MRR. Full design in the Widgets section.
 - **Package Tracking** — future, needs carrier API integration.
 - **Pro tier (paid)** — future, StoreKit.
-- **iPad / macOS** — future (currently iPhone-only layout).
+- **macOS** — future. **iPad is now supported** (NavigationSplitView, see iPad section); remaining iPad polish (true 3-column drill-down, multi-window) is optional/future.
 
 _(Shipped: Jack's full feedback batch — Reports PDF export, mileage deduction card, trip purpose presets, location favorites, multi-stop routes, mileage/expense presets, prominent timer-sheet presets button, Quarterly Tax widget, Settings→Profile redesign — plus Recently Deleted, Siri & Shortcuts, tax deadline reminders, and "Create Invoice" as a default Home quick action. See feature sections.)_
 
@@ -498,6 +531,8 @@ _(Shipped: Jack's full feedback batch — Reports PDF export, mileage deduction 
 - `ToolbarSpacer(placement:)` is an iOS 26 API — use it to break Liquid Glass grouping between toolbar items in the same placement
 - Onboarding gated by `@AppStorage("hasCompletedOnboarding")` — set to `false` in UserDefaults to re-trigger for testing
 - `ITSAppUsesNonExemptEncryption = NO` is set in build settings via `INFOPLIST_KEY_ITSAppUsesNonExemptEncryption` — no TestFlight export compliance prompts
+- **Info.plist split:** physical `BusinessTracker/Info.plist` holds `NSSupportsLiveActivities(+FrequentUpdates)`, `UIBackgroundModes: remote-notification` (CloudKit), and the `freelanced://` URL scheme. Permission strings + display name live in `INFOPLIST_KEY_*` build settings (merged at build): `NSCameraUsageDescription`, `NSLocationWhenInUseUsageDescription`, `NSPhotoLibraryUsageDescription` (present but unused — PHPicker needs no permission), `CFBundleDisplayName = Freelanced`. Local notifications need no usage string. iCloud container / App Group / push live in `BusinessTracker.entitlements` (separate from Info.plist).
+- **Settings keyboard "Done"** dismisses via BOTH `fieldFocused = false` AND `UIApplication…resignFirstResponder` — the latter is required because `AddressEntryField`'s internal TextFields aren't bound to Settings' `@FocusState`, so clearing the focus state alone wouldn't dismiss them.
 - `MKLocalSearchCompletion` cannot be instantiated directly — address search uses `LocationResult` enum (`.completion` or `.coordinate`) to handle both MapKit results and current-location coordinates uniformly
 - `UIImage` conforms to `Identifiable` via a `@retroactive` extension in `AddExpenseView.swift` — needed for `.sheet(item:)` on the receipt preview. Do not add a second conformance elsewhere.
 - SwiftData lightweight migration requires default values on the **property declaration**, not just in `init` — e.g. `var receiptImagesData: [Data] = []`. Missing the `= []` causes the store to silently fail to open, breaking saves for all models.

@@ -14,6 +14,7 @@ struct TimerSheet: View {
     @State private var selectedProject: Project?
     @State private var activePreset: TimePreset?   // preset used to start this session
     @State private var showPresets = false
+    @State private var sheetDetent: PresentationDetent = .medium
 
     // Post-save confirmation state
     @State private var savedHours: Double?
@@ -22,6 +23,17 @@ struct TimerSheet: View {
 
     private var availableProjects: [Project] {
         (selectedClient?.projects ?? []).sorted { $0.name < $1.name }
+    }
+
+    /// The configuration form is tall enough to clip at `.medium` once the project
+    /// picker appears (a client with projects, e.g. filled in by a preset), so we
+    /// open at `.large` in that case. (iPhone only — iPad has no detents.)
+    private var prefersLargeDetent: Bool {
+        !timerState.isRunning && !availableProjects.isEmpty
+    }
+
+    private func syncDetent() {
+        sheetDetent = prefersLargeDetent ? .large : .medium
     }
 
     var body: some View {
@@ -166,6 +178,17 @@ struct TimerSheet: View {
                 PresetsView()
             }
         }
+        // iPhone: medium/large drag detents, auto-opening at .large when the form
+        // is tall (project picker shown). iPad: apply NO detents so it presents as
+        // the standard centered form sheet like every other sheet.
+        // NOTE: we key off the device idiom, NOT horizontalSizeClass — content
+        // inside a presented sheet on iPad reports `.compact`, so a size-class
+        // check would wrongly apply phone detents on iPad.
+        .modifier(PhoneSheetDetents(selection: $sheetDetent))
+        .onAppear { syncDetent() }
+        .onChange(of: selectedClient) { _, _ in syncDetent() }
+        .onChange(of: selectedProject) { _, _ in syncDetent() }
+        .onChange(of: timerState.isRunning) { _, _ in syncDetent() }
     }
 
     // MARK: - Saved confirmation view
@@ -229,6 +252,22 @@ struct TimerSheet: View {
         Task {
             try? await Task.sleep(for: .seconds(1.8))
             await MainActor.run { dismiss() }
+        }
+    }
+}
+
+/// Applies medium/large sheet detents on iPhone only. On iPad it applies nothing,
+/// letting the sheet use the standard centered form-sheet presentation.
+/// Uses the device idiom (not `horizontalSizeClass`) because sheet content on
+/// iPad reports a `.compact` size class, which would defeat a size-class check.
+private struct PhoneSheetDetents: ViewModifier {
+    @Binding var selection: PresentationDetent
+    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    func body(content: Content) -> some View {
+        if isPhone {
+            content.presentationDetents([.medium, .large], selection: $selection)
+        } else {
+            content
         }
     }
 }

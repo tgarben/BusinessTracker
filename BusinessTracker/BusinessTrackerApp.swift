@@ -42,6 +42,7 @@ struct BusinessTrackerApp: App {
                     .environment(timerState)
                     .onOpenURL { url in handleWidgetDeepLink(url) }
                     .task {
+                        CloudKeyValueSync.start()
                         Self.purgeExpiredTrash()
                         consumePendingShortcutAction()
                         await TaxReminders.reschedule()
@@ -54,6 +55,7 @@ struct BusinessTrackerApp: App {
                     }
             } else {
                 OnboardingView()
+                    .task { CloudKeyValueSync.start() }
             }
         }
         .modelContainer(Self.sharedModelContainer)

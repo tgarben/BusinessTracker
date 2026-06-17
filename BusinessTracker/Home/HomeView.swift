@@ -221,7 +221,7 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showLogTime)       { LogTimeView() }
-            .sheet(isPresented: $showTimer)         { TimerSheet().presentationDetents([.medium,.large]) }
+            .sheet(isPresented: $showTimer)         { TimerSheet() }
             .sheet(isPresented: $showLogTrip)       { LogTripView() }
             .sheet(isPresented: $showAddExpense)    { AddExpenseView() }
             .sheet(isPresented: $showCreateInvoice) { InvoiceQuickActionSheet() }
@@ -289,7 +289,9 @@ private struct HomeSectionCard: View {
 
     @ViewBuilder
     private var quickActionsContent: some View {
-        let columns = [GridItem(.flexible()), GridItem(.flexible())]
+        // Adaptive so wide layouts (iPad) flow into 3+ columns instead of two
+        // very wide cells, while iPhone stays at two per row.
+        let columns = [GridItem(.adaptive(minimum: 150), spacing: 10)]
         LazyVGrid(columns: columns, spacing: 10) {
             ForEach(Array(enabledQuickActions.enumerated()), id: \.offset) { _, action in
                 let isActive = action == .startTimer && timerRunning

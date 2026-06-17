@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import CoreLocation
 import UserNotifications
 
@@ -61,6 +62,24 @@ private struct OnboardingBadge: View {
                     .foregroundStyle(.white)
             )
             .shadow(color: color.opacity(0.3), radius: 14, x: 0, y: 8)
+    }
+}
+
+/// Small pill shown when a page was pre-filled from the user's iCloud account
+/// (NSUbiquitousKeyValueStore), so the data appearing "for free" feels intentional.
+private struct iCloudPrefillBadge: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "icloud.fill")
+                .font(.caption2)
+            Text("Filled in from your iCloud account")
+                .font(.caption.weight(.medium))
+        }
+        .foregroundStyle(onboardingIndigo)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(onboardingIndigo.opacity(0.12), in: Capsule())
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -138,6 +157,10 @@ private struct OnboardingScaffold<Content: View>: View {
             .padding(.top, 6)
             .padding(.bottom, 16)
         }
+        // Keep the onboarding column a readable width and centered on iPad,
+        // where the page would otherwise stretch fields edge-to-edge.
+        .frame(maxWidth: 540)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -252,7 +275,12 @@ private struct AboutYouPage: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
-                    .padding(.bottom, 32)
+                    .padding(.bottom, prefilledFromCloud ? 16 : 32)
+
+                if prefilledFromCloud {
+                    iCloudPrefillBadge()
+                        .padding(.bottom, 24)
+                }
 
                 Text("YOUR NAME")
                     .font(.caption.weight(.semibold))
@@ -308,11 +336,28 @@ private struct AboutYouPage: View {
                     .padding(.leading, 4)
             }
         }
-        .onAppear {
-            name = storedName
-            lastName = storedLastName
-            focuses = Set(primaryUse.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+        .onAppear { seedFromStored() }
+        // iCloud (NSUbiquitousKeyValueStore) downloads asynchronously on a fresh
+        // device, so the stored values may land *after* this page first appears.
+        // Re-seed any field the user hasn't touched yet when that happens.
+        .onChange(of: storedName) { _, new in if name.isEmpty { name = new } }
+        .onChange(of: storedLastName) { _, new in if lastName.isEmpty { lastName = new } }
+        .onChange(of: primaryUse) { _, new in
+            if focuses.isEmpty {
+                focuses = Set(new.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            }
         }
+    }
+
+    private func seedFromStored() {
+        name = storedName
+        lastName = storedLastName
+        focuses = Set(primaryUse.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+
+    /// True once a name has been restored from iCloud (drives the prefill badge).
+    private var prefilledFromCloud: Bool {
+        !storedName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private func focusChip(_ option: String) -> some View {
@@ -393,7 +438,12 @@ private struct BusinessInfoPage: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
-                    .padding(.bottom, 28)
+                    .padding(.bottom, prefilledFromCloud ? 14 : 28)
+
+                if prefilledFromCloud {
+                    iCloudPrefillBadge()
+                        .padding(.bottom, 24)
+                }
 
                 VStack(spacing: 10) {
                     field("Business name", text: $businessName, keyboard: .default)
@@ -410,6 +460,12 @@ private struct BusinessInfoPage: View {
                 }
             }
         }
+    }
+
+    /// True when any business field already holds a value (restored from iCloud).
+    private var prefilledFromCloud: Bool {
+        ![businessName, businessAddress, businessPhone, businessEmail, businessWebsite, businessTaxID]
+            .allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
     private func field(_ placeholder: String, text: Binding<String>, keyboard: UIKeyboardType, isPhone: Bool = false) -> some View {
@@ -440,6 +496,7 @@ private struct PermissionsPage: View {
 
     @State private var locationDone = false
     @State private var notificationsDone = false
+    @State private var cameraDone = false
 
     var body: some View {
         OnboardingScaffold(
@@ -456,7 +513,7 @@ private struct PermissionsPage: View {
                     .font(.system(.largeTitle, design: .rounded).bold())
                     .multilineTextAlignment(.center)
 
-                Text("Optional, but they make tracking effortless. You stay in control.")
+                Text("All optional, but they make tracking effortless. You stay in control.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -470,6 +527,13 @@ private struct PermissionsPage: View {
                         description: "Auto-calculate driving distance when you log a trip.",
                         done: locationDone,
                         action: requestLocation
+                    )
+                    PermissionCard(
+                        icon: "camera.fill", color: .purple,
+                        title: "Camera",
+                        description: "Snap receipts to attach to your expenses.",
+                        done: cameraDone,
+                        action: requestCamera
                     )
                     PermissionCard(
                         icon: "bell.fill", color: .orange,
@@ -486,6 +550,12 @@ private struct PermissionsPage: View {
     private func requestLocation() {
         CLLocationManager().requestWhenInUseAuthorization()
         withAnimation { locationDone = true }
+    }
+
+    private func requestCamera() {
+        AVCaptureDevice.requestAccess(for: .video) { _ in
+            DispatchQueue.main.async { withAnimation { cameraDone = true } }
+        }
     }
 
     private func requestNotifications() {

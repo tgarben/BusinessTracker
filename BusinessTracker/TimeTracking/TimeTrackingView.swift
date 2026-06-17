@@ -96,7 +96,6 @@ struct TimeTrackingView: View {
             }
             .sheet(isPresented: $showTimer) {
                 TimerSheet()
-                    .presentationDetents([.medium,.large])
             }
             .sheet(item: $entryToEdit) { entry in
                 TimeEntryEditView(entry: entry)
