@@ -119,7 +119,7 @@ private struct PresetListRow: View {
                 }
                 if preset.effectiveRate > 0 {
                     Text("·").foregroundStyle(.tertiary)
-                    Text(preset.effectiveRate.formatted(.currency(code: "USD")) + "/hr")
+                    Text(preset.effectiveRate.formatted(AppCurrency.style) + "/hr")
                         .foregroundStyle(preset.hourlyRateOverride != nil ? .orange : .secondary)
                 }
             }
@@ -216,7 +216,7 @@ struct AddEditPresetView: View {
                         }
                     } else if projectRate > 0 {
                         LabeledContent("Rate from project") {
-                            Text(projectRate.formatted(.currency(code: "USD")) + "/hr")
+                            Text(projectRate.formatted(AppCurrency.style) + "/hr")
                                 .foregroundStyle(.secondary)
                         }
                     }

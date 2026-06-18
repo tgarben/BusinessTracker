@@ -12,6 +12,7 @@ struct RecentlyDeletedView: View {
     @Query(filter: #Predicate<Expense>     { $0.deletedDate != nil }) private var expenses: [Expense]
     @Query(filter: #Predicate<IncomeEntry> { $0.deletedDate != nil }) private var incomeEntries: [IncomeEntry]
     @Query(filter: #Predicate<Invoice>     { $0.deletedDate != nil }) private var invoices: [Invoice]
+    @Query(filter: #Predicate<Quote>       { $0.deletedDate != nil }) private var quotes: [Quote]
     @Query(filter: #Predicate<Client>      { $0.deletedDate != nil }) private var clients: [Client]
 
     @State private var pendingPurgeAll = false
@@ -57,15 +58,19 @@ struct RecentlyDeletedView: View {
         }
         for e in expenses {
             all.append(row(for: e, icon: Expense.categoryIcon(e.category), color: .red, title: e.category,
-                           subtitle: "\(e.amount.formatted(.currency(code: "USD"))) · \(e.date.formatted(date: .abbreviated, time: .omitted))"))
+                           subtitle: "\(e.amount.asCurrency) · \(e.date.formatted(date: .abbreviated, time: .omitted))"))
         }
         for inc in incomeEntries {
             all.append(row(for: inc, icon: "dollarsign.circle.fill", color: .green, title: inc.source.isEmpty ? "Income" : inc.source,
-                           subtitle: "\(inc.amount.formatted(.currency(code: "USD"))) · \(inc.date.formatted(date: .abbreviated, time: .omitted))"))
+                           subtitle: "\(inc.amount.asCurrency) · \(inc.date.formatted(date: .abbreviated, time: .omitted))"))
         }
         for inv in invoices {
             all.append(row(for: inv, icon: "doc.text.fill", color: .purple, title: inv.formattedNumber,
-                           subtitle: "\(inv.subtotal.formatted(.currency(code: "USD"))) · \(inv.issueDate.formatted(date: .abbreviated, time: .omitted))"))
+                           subtitle: "\(inv.subtotal.asCurrency) · \(inv.issueDate.formatted(date: .abbreviated, time: .omitted))"))
+        }
+        for q in quotes {
+            all.append(row(for: q, icon: "list.clipboard.fill", color: .teal, title: q.formattedNumber,
+                           subtitle: "\(q.total.asCurrency) · \(q.issueDate.formatted(date: .abbreviated, time: .omitted))"))
         }
         for c in clients {
             all.append(row(for: c, icon: "person.fill", color: .indigo, title: c.name.isEmpty ? "Client" : c.name,
@@ -142,6 +147,7 @@ struct RecentlyDeletedView: View {
         for e in expenses      { modelContext.delete(e) }
         for i in incomeEntries { modelContext.delete(i) }
         for i in invoices      { modelContext.delete(i) }
+        for q in quotes        { modelContext.delete(q) }
         for c in clients       { modelContext.delete(c) }
     }
 }

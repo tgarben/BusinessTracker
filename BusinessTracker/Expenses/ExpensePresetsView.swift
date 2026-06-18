@@ -30,7 +30,7 @@ struct ExpensePresetsView: View {
                             }
                             Spacer()
                             if let amount = preset.amount {
-                                Text(amount.formatted(.currency(code: "USD")))
+                                Text(amount.asCurrency)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }

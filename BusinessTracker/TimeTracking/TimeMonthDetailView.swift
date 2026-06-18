@@ -91,7 +91,7 @@ private struct MonthHoursSummaryCard: View {
         HStack(spacing: 0) {
             item(value: String(format: "%.1f", hours), unit: "hrs", caption: label)
             Divider().frame(height: 40)
-            item(value: earnings.formatted(.currency(code: "USD")), unit: nil, caption: "Earned")
+            item(value: earnings.asCurrency, unit: nil, caption: "Earned")
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)

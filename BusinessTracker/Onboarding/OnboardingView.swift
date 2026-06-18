@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import AVFoundation
 import CoreLocation
 import UserNotifications
@@ -241,12 +242,14 @@ private struct AboutYouPage: View {
 
     @AppStorage("user_name") private var storedName: String = ""
     @AppStorage("user_lastName") private var storedLastName: String = ""
+    @AppStorage("user_avatar") private var avatarData: Data = Data()
     @AppStorage("home_sectionOrder") private var sectionOrder: String = HomeSection.defaultOrderString
     @AppStorage("user_primaryUse") private var primaryUse: String = ""
 
     @State private var name: String = ""
     @State private var lastName: String = ""
     @State private var focuses: Set<String> = []
+    @State private var avatarItem: PhotosPickerItem?
     @FocusState private var focusedField: NameField?
 
     private enum NameField { case first, last }
@@ -260,9 +263,34 @@ private struct AboutYouPage: View {
             onPrimary: save
         ) {
             VStack(alignment: .leading, spacing: 0) {
-                OnboardingBadge(icon: "person.fill", size: 76)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 22)
+                VStack(spacing: 8) {
+                    PhotosPicker(selection: $avatarItem, matching: .images) {
+                        avatarBadge
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 26, height: 26)
+                                    .background(onboardingIndigo, in: Circle())
+                                    .overlay(Circle().strokeBorder(Color(.systemGroupedBackground), lineWidth: 2))
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .onChange(of: avatarItem) { _, item in
+                        Task {
+                            if let raw = try? await item?.loadTransferable(type: Data.self),
+                               let processed = UserAvatarImage.processed(raw) {
+                                avatarData = processed
+                            }
+                        }
+                    }
+
+                    Text(avatarData.isEmpty ? "Add a photo (optional)" : "Change photo")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 22)
 
                 Text("A little about you")
                     .font(.system(.largeTitle, design: .rounded).bold())
@@ -346,6 +374,20 @@ private struct AboutYouPage: View {
             if focuses.isEmpty {
                 focuses = Set(new.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
             }
+        }
+    }
+
+    /// The user's photo if set, otherwise the app-icon-style person badge.
+    @ViewBuilder private var avatarBadge: some View {
+        if !avatarData.isEmpty, let image = UIImage(data: avatarData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 76, height: 76)
+                .clipShape(Circle())
+                .shadow(color: onboardingIndigo.opacity(0.3), radius: 14, x: 0, y: 8)
+        } else {
+            OnboardingBadge(icon: "person.fill", size: 76)
         }
     }
 

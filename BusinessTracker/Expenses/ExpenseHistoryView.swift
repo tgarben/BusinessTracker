@@ -27,7 +27,7 @@ struct ExpenseHistoryView: View {
                                 Text(monthStart.formatted(.dateTime.month(.wide).year()))
                                     .font(.headline)
                                 Spacer()
-                                Text(total.formatted(.currency(code: "USD")))
+                                Text(total.asCurrency)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.red)
                                     .padding(.horizontal, 8)

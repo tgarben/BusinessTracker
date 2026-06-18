@@ -44,6 +44,7 @@ enum QuickAction: String, CaseIterable {
     case logTrip
     case addExpense
     case createInvoice
+    case createQuote
 
     var label: String {
         switch self {
@@ -52,6 +53,7 @@ enum QuickAction: String, CaseIterable {
         case .logTrip:       return "Log Trip"
         case .addExpense:    return "Add Expense"
         case .createInvoice: return "Create Invoice"
+        case .createQuote:   return "Create Estimate"
         }
     }
 
@@ -62,6 +64,7 @@ enum QuickAction: String, CaseIterable {
         case .logTrip:       return "car.fill"
         case .addExpense:    return "creditcard.fill"
         case .createInvoice: return "doc.text.fill"
+        case .createQuote:   return "list.clipboard.fill"
         }
     }
 
@@ -78,20 +81,23 @@ enum QuickAction: String, CaseIterable {
         case .logTrip:              return .blue
         case .addExpense:           return .red
         case .createInvoice:        return .purple
+        case .createQuote:          return .teal
         }
     }
 
-    static let defaultOrderString = "startTimer,logTime,logTrip,addExpense,createInvoice"
-    static let defaultEnabledString = "startTimer,logTime,logTrip,addExpense,createInvoice"
+    static let defaultOrderString = "startTimer,logTime,logTrip,addExpense,createInvoice,createQuote"
+    static let defaultEnabledString = "startTimer,logTime,logTrip,addExpense,createInvoice,createQuote"
 }
 
 // MARK: - HomeView
 
 struct HomeView: View {
     @Environment(TimerState.self) private var timerState
+    @Environment(Entitlements.self) private var pro
     @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }) private var timeEntries: [TimeEntry]
     @Query(filter: #Predicate<MileageTrip> { $0.deletedDate == nil }) private var trips: [MileageTrip]
     @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }) private var expenses: [Expense]
+    @Query(filter: #Predicate<Invoice> { $0.deletedDate == nil && $0.isPaid == false }) private var unpaidInvoices: [Invoice]
 
     @AppStorage("user_name") private var userName: String = ""
     @AppStorage("home_sectionOrder") private var sectionOrderString: String = HomeSection.defaultOrderString
@@ -103,9 +109,17 @@ struct HomeView: View {
     @State private var showLogTrip = false
     @State private var showAddExpense = false
     @State private var showCreateInvoice = false
+    @State private var showCreateQuote = false
     @State private var showSettings = false
     @State private var showEditLayout = false
     @State private var showReports = false
+    @State private var showOverdue = false
+    @State private var paywall: ProFeature?
+
+    // MARK: Overdue invoices
+
+    private var overdueInvoices: [Invoice] { unpaidInvoices.filter { $0.isOverdue } }
+    private var overdueTotal: Double { overdueInvoices.reduce(0) { $0 + $1.total } }
 
     // MARK: Date windows
 
@@ -136,7 +150,7 @@ struct HomeView: View {
     private var earningsSubtitle: String {
         let days = max(Calendar.current.component(.weekday, from: .now), 1)
         let avg = weekEarnings / Double(days)
-        return "\(avg.formatted(.currency(code: "USD")))/day avg"
+        return "\(avg.asCurrency)/day avg"
     }
 
     // MARK: Greeting
@@ -176,6 +190,15 @@ struct HomeView: View {
                         .onTapGesture { showTimer = true }
                 }
 
+                // Overdue invoices — pinned alert card
+                if !overdueInvoices.isEmpty {
+                    OverdueInvoicesCard(count: overdueInvoices.count, total: overdueTotal)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .onTapGesture { showOverdue = true }
+                }
+
                 ForEach(sectionOrder, id: \.self) { section in
                     if section == .quickActions && enabledQuickActions.isEmpty { EmptyView() } else {
                     HomeSectionCard(section: section,
@@ -192,7 +215,9 @@ struct HomeView: View {
                                     showLogTime: $showLogTime,
                                     showLogTrip: $showLogTrip,
                                     showAddExpense: $showAddExpense,
-                                    showCreateInvoice: $showCreateInvoice)
+                                    showCreateInvoice: $showCreateInvoice,
+                                    showCreateQuote: $showCreateQuote,
+                                    paywall: $paywall)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -206,18 +231,23 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "person.crop.circle")
+                        Image(systemName: "person.fill")
                     }
+                    .accessibilityLabel("Profile & Settings")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showReports = true } label: {
+                    Button {
+                        if pro.isProEffective { showReports = true } else { paywall = .reports }
+                    } label: {
                         Image(systemName: "chart.bar")
                     }
+                    .accessibilityLabel("Reports")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showEditLayout = true } label: {
                         Image(systemName: "slider.horizontal.3")
                     }
+                    .accessibilityLabel("Customize Home")
                 }
             }
             .sheet(isPresented: $showLogTime)       { LogTimeView() }
@@ -225,8 +255,11 @@ struct HomeView: View {
             .sheet(isPresented: $showLogTrip)       { LogTripView() }
             .sheet(isPresented: $showAddExpense)    { AddExpenseView() }
             .sheet(isPresented: $showCreateInvoice) { InvoiceQuickActionSheet() }
+            .sheet(isPresented: $showCreateQuote)   { QuoteQuickActionSheet() }
             .sheet(isPresented: $showReports)    { ReportsView().presentationDragIndicator(.visible) }
+            .sheet(isPresented: $showOverdue)    { OverdueInvoicesView() }
             .sheet(isPresented: $showSettings)   { SettingsView() }
+            .proPaywall($paywall)
             .sheet(isPresented: $showEditLayout) {
                 HomeLayoutEditor(
                     sectionOrderString: $sectionOrderString,
@@ -241,6 +274,7 @@ struct HomeView: View {
 // MARK: - Section card
 
 private struct HomeSectionCard: View {
+    @Environment(Entitlements.self) private var pro
     let section: HomeSection
     let timerRunning: Bool
     let enabledQuickActions: [QuickAction]
@@ -257,6 +291,8 @@ private struct HomeSectionCard: View {
     @Binding var showLogTrip: Bool
     @Binding var showAddExpense: Bool
     @Binding var showCreateInvoice: Bool
+    @Binding var showCreateQuote: Bool
+    @Binding var paywall: ProFeature?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -301,7 +337,8 @@ private struct HomeSectionCard: View {
                     case .logTime:       showLogTime = true
                     case .logTrip:       showLogTrip = true
                     case .addExpense:    showAddExpense = true
-                    case .createInvoice: showCreateInvoice = true
+                    case .createInvoice: if pro.isProEffective { showCreateInvoice = true } else { paywall = .invoicing }
+                    case .createQuote:   if pro.isProEffective { showCreateQuote = true } else { paywall = .quotes }
                     }
                 } label: {
                     QuickActionCell(action: action, isActive: isActive)
@@ -323,7 +360,7 @@ private struct HomeSectionCard: View {
             TodayStatCell(value: String(format: "%.1f", todayMiles), unit: "mi",
                           label: "Driven", color: .blue, isEmpty: todayMiles == 0)
             Divider().frame(height: 36)
-            TodayStatCell(value: todaySpend == 0 ? "$0" : todaySpend.formatted(.currency(code: "USD")),
+            TodayStatCell(value: todaySpend == 0 ? "$0" : todaySpend.asCurrency,
                           unit: nil, label: "Spent", color: .red, isEmpty: todaySpend == 0)
         }
         .padding(.vertical, 12)
@@ -340,7 +377,7 @@ private struct HomeSectionCard: View {
                          color: .indigo)
             Divider().frame(height: 48)
             WeekStatCell(title: "Earnings",
-                         value: weekEarnings.formatted(.currency(code: "USD")),
+                         value: weekEarnings.asCurrency,
                          subtitle: weekEarnings == 0 ? "Nothing logged yet" : earningsSubtitle,
                          color: .indigo)
         }
@@ -494,6 +531,40 @@ struct HomeLayoutEditor: View {
     }
 }
 
+// MARK: - Overdue invoices card
+
+private struct OverdueInvoicesCard: View {
+    let count: Int
+    let total: Double
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle().fill(Color.red.opacity(0.15)).frame(width: 44, height: 44)
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.red)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(count) Overdue Invoice\(count == 1 ? "" : "s")")
+                    .font(.subheadline.weight(.semibold))
+                Text("\(total.asCurrency) outstanding")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.red.opacity(0.25), lineWidth: 1))
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+}
+
 // MARK: - Quick Action cell
 
 private struct QuickActionCell: View {
@@ -574,5 +645,6 @@ private struct WeekStatCell: View {
 #Preview {
     HomeView()
         .environment(TimerState())
+        .environment(Entitlements())
         .modelContainer(for: [TimeEntry.self, MileageTrip.self, Expense.self, Client.self, Project.self], inMemory: true)
 }

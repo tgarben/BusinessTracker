@@ -78,7 +78,7 @@ struct TimeTrackingView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "person.crop.circle")
+                        Image(systemName: "person.fill")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -161,7 +161,7 @@ private struct WeekSummaryCard: View {
             )
             Divider().frame(height: 40)
             summaryItem(
-                value: earnings.formatted(.currency(code: "USD")),
+                value: earnings.asCurrency,
                 unit: nil,
                 label: "Earned"
             )
@@ -272,7 +272,7 @@ struct TimeEntryRow: View {
 
                 Spacer()
 
-                Text(entry.earnings.formatted(.currency(code: "USD")))
+                Text(entry.earnings.asCurrency)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
             }

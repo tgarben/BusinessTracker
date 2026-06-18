@@ -86,7 +86,7 @@ struct TimeEntryEditView: View {
                     }
                     if hours > 0 && hourlyRate > 0 {
                         LabeledContent("Total") {
-                            Text(earnings.formatted(.currency(code: "USD")))
+                            Text(earnings.asCurrency)
                                 .font(.headline)
                         }
                     }

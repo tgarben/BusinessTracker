@@ -78,7 +78,7 @@ struct ExpensesView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "person.crop.circle")
+                        Image(systemName: "person.fill")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -140,7 +140,7 @@ struct ExpensesView: View {
                     ForEach(presets) { preset in
                         speedDialItem(
                             title: preset.name,
-                            subtitle: preset.amount.map { $0.formatted(.currency(code: "USD")) } ?? preset.category,
+                            subtitle: preset.amount.map { $0.asCurrency } ?? preset.category,
                             icon: Expense.categoryIcon(preset.category)
                         ) { selectPreset(preset) }
                         .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -230,7 +230,7 @@ struct ExpenseSummaryCard: View {
         HStack(spacing: 0) {
             VStack(spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(total.formatted(.currency(code: "USD")))
+                    Text(total.asCurrency)
                         .font(.title2.bold())
                         .foregroundStyle(.red)
                 }
@@ -266,7 +266,7 @@ struct ExpenseRow: View {
                 Label(expense.category, systemImage: Expense.categoryIcon(expense.category))
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(expense.amount.formatted(.currency(code: "USD")))
+                Text(expense.amount.asCurrency)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.red)
                     .padding(.horizontal, 8)

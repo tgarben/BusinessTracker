@@ -153,7 +153,7 @@ struct LogTripView: View {
                                 .foregroundStyle(.secondary)
                         }
                         LabeledContent("Reimbursement") {
-                            Text(reimbursement, format: .currency(code: "USD"))
+                            Text(reimbursement, format: AppCurrency.style)
                                 .font(.headline)
                         }
                     }

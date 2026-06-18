@@ -12,7 +12,7 @@ struct IncomeRow: View {
                 Text(entry.source)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(entry.amount.formatted(.currency(code: "USD")))
+                Text(entry.amount.asCurrency)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.green)
                     .padding(.horizontal, 8)

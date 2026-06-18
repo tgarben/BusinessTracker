@@ -6,18 +6,26 @@ import SwiftData
 struct InvoiceRow: View {
     let invoice: Invoice
 
+    /// Three-state status: Paid (green), Overdue (red), Unpaid (orange).
+    private var statusColor: Color {
+        invoice.isPaid ? .green : (invoice.isOverdue ? .red : .orange)
+    }
+    private var statusText: String {
+        invoice.isPaid ? "Paid" : (invoice.isOverdue ? "Overdue" : "Unpaid")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(invoice.formattedNumber)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(invoice.total.formatted(.currency(code: "USD")))
+                Text(invoice.total.asCurrency)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(invoice.isPaid ? .green : .orange)
+                    .foregroundStyle(statusColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background((invoice.isPaid ? Color.green : Color.orange).opacity(0.1), in: Capsule())
+                    .background(statusColor.opacity(0.1), in: Capsule())
             }
 
             HStack(spacing: 6) {
@@ -33,12 +41,58 @@ struct InvoiceRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(invoice.isPaid ? "Paid" : "Unpaid")
+                Text(statusText)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(invoice.isPaid ? .green : .orange)
+                    .foregroundStyle(statusColor)
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Overdue invoices sheet (opened from the Home card)
+
+struct OverdueInvoicesView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Query(filter: #Predicate<Invoice> { $0.deletedDate == nil && $0.isPaid == false },
+           sort: \Invoice.dueDate) private var unpaid: [Invoice]
+    @State private var viewing: Invoice?
+
+    private var overdue: [Invoice] { unpaid.filter { $0.isOverdue } }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(overdue) { invoice in
+                    VStack(alignment: .leading, spacing: 2) {
+                        InvoiceRow(invoice: invoice)
+                        if let name = invoice.client?.name, !name.isEmpty {
+                            Text(name).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { viewing = invoice }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .overlay {
+                if overdue.isEmpty {
+                    ContentUnavailableView(
+                        "No Overdue Invoices",
+                        systemImage: "checkmark.circle",
+                        description: Text("You're all caught up.")
+                    )
+                }
+            }
+            .navigationTitle("Overdue Invoices")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .sheet(item: $viewing) { InvoiceDetailView(invoice: $0) }
+        }
     }
 }
 
@@ -69,7 +123,7 @@ struct InvoiceQuickActionSheet: View {
                 } else {
                     List(clients) { client in
                         NavigationLink(client.name) {
-                            CreateInvoiceContent(client: client)
+                            CreateInvoiceContent(client: client, onComplete: { dismiss() })
                         }
                     }
                 }
@@ -105,6 +159,10 @@ private struct CreateInvoiceContent: View {
     @Environment(\.modelContext) private var modelContext
 
     let client: Client
+    /// Closes the whole flow after creating. When pushed inside the quick-action
+    /// client picker, the plain `dismiss()` only pops back to the picker, so that
+    /// path passes a closure that dismisses the entire sheet instead.
+    let onComplete: (() -> Void)?
 
     @Query(filter: #Predicate<Invoice> { $0.deletedDate == nil }, sort: \Invoice.invoiceNumber, order: .reverse) private var allInvoices: [Invoice]
     @Query private var clientTimeEntries: [TimeEntry]
@@ -128,16 +186,36 @@ private struct CreateInvoiceContent: View {
     @State private var poNumber: String = ""
     @State private var notes: String = ""
     @State private var didPrefill = false
+    @State private var preview: PreviewDoc?
+
+    @AppStorage("doc_numberResetYearly") private var resetYearly = false
 
     private let paymentTermsOptions = ["Due Upon Receipt", "Net 15", "Net 30", "Net 45", "Net 60"]
 
-    init(client: Client) {
+    /// Next invoice number — highest existing + 1, scoped to the current year
+    /// when per-year reset is on.
+    private var nextNumber: Int {
+        if resetYearly {
+            let year = Calendar.current.component(.year, from: .now)
+            let inYear = allInvoices.filter { Calendar.current.component(.year, from: $0.issueDate) == year }
+            return (inYear.map(\.invoiceNumber).max() ?? 0) + 1
+        }
+        return (allInvoices.map(\.invoiceNumber).max() ?? 0) + 1
+    }
+
+    init(client: Client, onComplete: (() -> Void)? = nil) {
         self.client = client
+        self.onComplete = onComplete
         let id = client.persistentModelID
         _clientTimeEntries = Query(
             filter: #Predicate<TimeEntry> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
             sort: \TimeEntry.date, order: .reverse
         )
+    }
+
+    /// Fully closes the create flow (preferring `onComplete` when supplied).
+    private func finish() {
+        if let onComplete { onComplete() } else { dismiss() }
     }
 
     private var unbilledEntries: [TimeEntry] {
@@ -243,7 +321,7 @@ private struct CreateInvoiceContent: View {
                                     .frame(width: 70)
                             }
                             Spacer()
-                            Text(draft.lineTotal.formatted(.currency(code: "USD")))
+                            Text(draft.lineTotal.asCurrency)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.indigo)
                                 .frame(width: 76, alignment: .trailing)
@@ -284,14 +362,14 @@ private struct CreateInvoiceContent: View {
                         .multilineTextAlignment(.trailing)
                         .frame(width: 50)
                     Text("%").foregroundStyle(.secondary)
-                    Text(taxAmount.formatted(.currency(code: "USD")))
+                    Text(taxAmount.asCurrency)
                         .foregroundStyle(.secondary)
                         .frame(width: 76, alignment: .trailing)
                 }
                 HStack {
                     Text("Total Due").font(.headline)
                     Spacer()
-                    Text(invoiceTotal.formatted(.currency(code: "USD")))
+                    Text(invoiceTotal.asCurrency)
                         .font(.headline)
                         .foregroundStyle(.green)
                 }
@@ -315,7 +393,8 @@ private struct CreateInvoiceContent: View {
                     .lineLimit(3...6)
             }
         }
-        .navigationTitle("New Invoice — \(client.name)")
+        .navigationTitle("New Invoice")
+        .navigationSubtitle(client.name)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.immediately)
         .toolbar {
@@ -330,8 +409,7 @@ private struct CreateInvoiceContent: View {
         .onAppear {
             guard !didPrefill else { return }
             didPrefill = true
-            let next = (allInvoices.first?.invoiceNumber ?? 0) + 1
-            invoiceNumberText = String(format: "%03d", next)
+            invoiceNumberText = String(format: "%03d", nextNumber)
             selectedEntryIDs = Set(unbilledEntries.map(\.persistentModelID))
             // Pre-fill from business defaults
             taxRateText = defaultTaxRate > 0 ? String(format: "%.2f", defaultTaxRate) : ""
@@ -339,13 +417,17 @@ private struct CreateInvoiceContent: View {
             acceptedPayments = defaultAcceptedPayments
             paymentInstructions = defaultPaymentInstructions
         }
+        // After creating, preview the finished PDF; closing it dismisses the form.
+        .sheet(item: $preview, onDismiss: { finish() }) { doc in
+            DocumentPreviewView(doc: doc)
+        }
     }
 
     private func totalRow(_ label: String, _ value: Double, weight: Font.Weight) -> some View {
         HStack {
             Text(label).fontWeight(weight)
             Spacer()
-            Text(value.formatted(.currency(code: "USD"))).fontWeight(weight)
+            Text(value.asCurrency).fontWeight(weight)
         }
     }
 
@@ -370,7 +452,7 @@ private struct CreateInvoiceContent: View {
 
             Spacer()
 
-            Text(entry.earnings.formatted(.currency(code: "USD")))
+            Text(entry.earnings.asCurrency)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.indigo)
         }
@@ -386,7 +468,7 @@ private struct CreateInvoiceContent: View {
     }
 
     private func save() {
-        let number = Int(invoiceNumberText) ?? ((allInvoices.first?.invoiceNumber ?? 0) + 1)
+        let number = Int(invoiceNumberText) ?? nextNumber
         let invoice = Invoice(
             invoiceNumber: number,
             issueDate: issueDate,
@@ -416,7 +498,13 @@ private struct CreateInvoiceContent: View {
             )
             modelContext.insert(item)
         }
-        dismiss()
+        // Persist so the PDF render sees the finalized relationships, then preview it.
+        try? modelContext.save()
+        if let url = makeInvoicePDF(invoice: invoice, userName: userFullName()) {
+            preview = PreviewDoc(url: url, title: invoice.formattedNumber, toast: "Invoice Created")
+        } else {
+            finish()
+        }
     }
 }
 
@@ -458,12 +546,14 @@ struct InvoiceDetailView: View {
                     HStack {
                         Text("Status")
                         Spacer()
-                        Text(invoice.isPaid ? "Paid" : "Unpaid")
+                        let color: Color = invoice.isPaid ? .green : (invoice.isOverdue ? .red : .orange)
+                        let label = invoice.isPaid ? "Paid" : (invoice.isOverdue ? "Overdue" : "Unpaid")
+                        Text(invoice.isOverdue ? "\(label) · \(invoice.daysOverdue)d" : label)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(invoice.isPaid ? .green : .orange)
+                            .foregroundStyle(color)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
-                            .background((invoice.isPaid ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+                            .background(color.opacity(0.12), in: Capsule())
                     }
                     if invoice.isPaid, let paid = invoice.paidDate {
                         LabeledContent("Paid On", value: paid.formatted(date: .long, time: .omitted))
@@ -495,7 +585,7 @@ struct InvoiceDetailView: View {
                     HStack {
                         Text("Total Due").font(.headline)
                         Spacer()
-                        Text(invoice.total.formatted(.currency(code: "USD")))
+                        Text(invoice.total.asCurrency)
                             .font(.headline)
                             .foregroundStyle(.green)
                     }
@@ -539,12 +629,14 @@ struct InvoiceDetailView: View {
                             ShareLink(item: url, subject: Text(invoice.formattedNumber)) {
                                 Image(systemName: "square.and.arrow.up")
                             }
+                            .accessibilityLabel("Share Invoice")
                         } else {
                             Button {
                                 pdfURL = makeInvoicePDF(invoice: invoice, userName: userFullName())
                             } label: {
                                 Image(systemName: "square.and.arrow.up")
                             }
+                            .accessibilityLabel("Share Invoice")
                         }
                     }
                 }
@@ -554,10 +646,12 @@ struct InvoiceDetailView: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
                         }
+                        .accessibilityLabel("Mark as Unpaid")
                     } else {
                         Button { showMarkPaidSheet = true } label: {
                             Image(systemName: "checkmark.circle")
                         }
+                        .accessibilityLabel("Mark as Paid")
                     }
                 }
             }
@@ -585,12 +679,12 @@ struct InvoiceDetailView: View {
                 Text(entry.project?.name ?? "Uncategorized")
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                Text(entry.earnings.formatted(.currency(code: "USD")))
+                Text(entry.earnings.asCurrency)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.indigo)
             }
             HStack(spacing: 4) {
-                Text(String(format: "%.2f hrs × \(entry.hourlyRate.formatted(.currency(code: "USD")))/hr", entry.hours))
+                Text(String(format: "%.2f hrs × \(entry.hourlyRate.asCurrency)/hr", entry.hours))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("·").foregroundStyle(.tertiary)
@@ -613,7 +707,7 @@ struct InvoiceDetailView: View {
             Text(invoice.additionalDescription.isEmpty ? "Additional Charges" : invoice.additionalDescription)
                 .font(.subheadline.weight(.medium))
             Spacer()
-            Text(invoice.additionalAmount.formatted(.currency(code: "USD")))
+            Text(invoice.additionalAmount.asCurrency)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.indigo)
         }
@@ -626,11 +720,11 @@ struct InvoiceDetailView: View {
                 Text(item.itemDescription.isEmpty ? "Item" : item.itemDescription)
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                Text(item.lineTotal.formatted(.currency(code: "USD")))
+                Text(item.lineTotal.asCurrency)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.indigo)
             }
-            Text("\(item.quantity.formatted(.number.precision(.fractionLength(0...2)))) × \(item.unitPrice.formatted(.currency(code: "USD")))")
+            Text("\(item.quantity.formatted(.number.precision(.fractionLength(0...2)))) × \(item.unitPrice.asCurrency)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -641,7 +735,7 @@ struct InvoiceDetailView: View {
         HStack {
             Text(label).font(.subheadline).foregroundStyle(.secondary)
             Spacer()
-            Text(value.formatted(.currency(code: "USD")))
+            Text(value.asCurrency)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(color)
         }
@@ -685,6 +779,7 @@ private struct MarkPaidSheet: View {
 /// Standardized business "from" info, read from the same UserDefaults keys as Settings.
 struct BusinessInfo {
     var name: String, address: String, address2: String, phone: String, email: String, website: String, taxID: String
+    var logoData: Data? = nil
 
     static func load(fallbackName: String) -> BusinessInfo {
         let d = UserDefaults.standard
@@ -696,415 +791,85 @@ struct BusinessInfo {
             phone: d.string(forKey: "business_phone") ?? "",
             email: d.string(forKey: "business_email") ?? "",
             website: d.string(forKey: "business_website") ?? "",
-            taxID: d.string(forKey: "business_taxID") ?? ""
+            taxID: d.string(forKey: "business_taxID") ?? "",
+            logoData: d.data(forKey: "business_logo")
         )
     }
 
     var contactLines: [String] { [phone, email, website].filter { !$0.isEmpty } }
 }
 
-/// A unified row in the invoice line-item table (from a time entry or a manual line item).
-struct InvoicePDFRow: Identifiable {
-    let id = UUID()
-    let description: String
-    let detail: String?
-    let qty: String
-    let rate: String
-    let amount: String
-}
-
-private func invoicePDFRows(for invoice: Invoice) -> [InvoicePDFRow] {
-    var rows: [InvoicePDFRow] = []
+/// Builds the unified table rows for an invoice (time entries + manual line items + legacy extra).
+private func invoiceDocRows(for invoice: Invoice) -> [DocPDFRow] {
+    var rows: [DocPDFRow] = []
     for entry in (invoice.timeEntries ?? []).sorted(by: { $0.date < $1.date }) {
         let detail = "\(entry.date.formatted(date: .abbreviated, time: .omitted))\(entry.notes.isEmpty ? "" : " · \(entry.notes)")"
-        rows.append(InvoicePDFRow(
+        rows.append(DocPDFRow(
             description: entry.project?.name ?? "Uncategorized",
             detail: detail,
             qty: String(format: "%.2f", entry.hours),
-            rate: entry.hourlyRate.formatted(.currency(code: "USD")),
-            amount: entry.earnings.formatted(.currency(code: "USD"))
+            rate: entry.hourlyRate.asCurrency,
+            amount: entry.earnings.asCurrency
         ))
     }
     for item in (invoice.lineItems ?? []).sorted(by: { $0.sortOrder < $1.sortOrder }) {
-        rows.append(InvoicePDFRow(
+        rows.append(DocPDFRow(
             description: item.itemDescription.isEmpty ? "Item" : item.itemDescription,
             detail: nil,
             qty: item.quantity.formatted(.number.precision(.fractionLength(0...2))),
-            rate: item.unitPrice.formatted(.currency(code: "USD")),
-            amount: item.lineTotal.formatted(.currency(code: "USD"))
+            rate: item.unitPrice.asCurrency,
+            amount: item.lineTotal.asCurrency
         ))
     }
     if invoice.additionalAmount > 0 {
-        rows.append(InvoicePDFRow(
+        rows.append(DocPDFRow(
             description: invoice.additionalDescription.isEmpty ? "Additional Charges" : invoice.additionalDescription,
             detail: nil, qty: "—", rate: "—",
-            amount: invoice.additionalAmount.formatted(.currency(code: "USD"))
+            amount: invoice.additionalAmount.asCurrency
         ))
     }
     return rows
 }
 
-// MARK: - PDF shared helpers (letter size: 612×792pt, 56pt margins)
-
-private func invoicePDFDivider() -> some View {
-    Rectangle().fill(Color(white: 0.85)).frame(height: 1).padding(.horizontal, 56)
-}
-
-private func invoicePDFLabel(_ text: String) -> some View {
-    Text(text)
-        .font(.system(size: 9, weight: .semibold))
-        .foregroundColor(Color(white: 0.55))
-        .tracking(1.5)
-}
-
-private func invoicePDFMeta(_ label: String, _ value: String) -> some View {
-    HStack(spacing: 8) {
-        Text(label).font(.system(size: 10)).foregroundColor(Color(white: 0.5))
-        Text(value).font(.system(size: 10, weight: .semibold)).foregroundColor(.black)
-    }
-}
-
-private func invoicePDFTableHeader() -> some View {
-    VStack(spacing: 0) {
-        HStack {
-            Text("DESCRIPTION").frame(maxWidth: .infinity, alignment: .leading)
-            Text("QTY").frame(width: 50, alignment: .trailing)
-            Text("RATE").frame(width: 72, alignment: .trailing)
-            Text("AMOUNT").frame(width: 80, alignment: .trailing)
-        }
-        .font(.system(size: 9, weight: .semibold))
-        .foregroundColor(Color(white: 0.5))
-        .tracking(1)
-        .padding(.horizontal, 56)
-        .padding(.vertical, 10)
-        .background(Color(white: 0.96))
-
-        Rectangle().fill(Color(white: 0.88)).frame(height: 1)
-    }
-}
-
-private func invoicePDFRowView(_ row: InvoicePDFRow) -> some View {
-    VStack(spacing: 0) {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.description)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.black)
-                if let detail = row.detail, !detail.isEmpty {
-                    Text(detail)
-                        .font(.system(size: 10))
-                        .foregroundColor(Color(white: 0.55))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text(row.qty).frame(width: 50, alignment: .trailing)
-                .font(.system(size: 12)).foregroundColor(Color(white: 0.4))
-            Text(row.rate).frame(width: 72, alignment: .trailing)
-                .font(.system(size: 12)).foregroundColor(Color(white: 0.4))
-            Text(row.amount).frame(width: 80, alignment: .trailing)
-                .font(.system(size: 12, weight: .medium)).foregroundColor(.black)
-        }
-        .padding(.horizontal, 56)
-        .padding(.vertical, 12)
-
-        Rectangle().fill(Color(white: 0.92)).frame(height: 1)
-    }
-}
-
-// Totals + payment + notes footer, shown on the last page only.
-private func invoicePDFFooter(invoice: Invoice, business: BusinessInfo) -> some View {
-    let usd: (Double) -> String = { $0.formatted(.currency(code: "USD")) }
-    return VStack(alignment: .leading, spacing: 0) {
-        // Totals
-        HStack {
-            Spacer()
-            VStack(alignment: .trailing, spacing: 5) {
-                totalsLine("Subtotal", usd(invoice.subtotal), bold: false)
-                if invoice.discountAmount > 0 {
-                    totalsLine("Discount", "−\(usd(invoice.discountAmount))", bold: false)
-                }
-                if invoice.taxRate > 0 {
-                    totalsLine("Sales Tax (\(invoice.taxRate.formatted(.number.precision(.fractionLength(0...2))))%)", usd(invoice.taxAmount), bold: false)
-                }
-                Rectangle().fill(Color(white: 0.75)).frame(width: 220, height: 1).padding(.vertical, 2)
-                HStack {
-                    Text("TOTAL DUE")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color(white: 0.45))
-                        .tracking(1)
-                    Spacer(minLength: 24)
-                    Text(usd(invoice.total))
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(.black)
-                }
-                .frame(width: 220)
-            }
-        }
-        .padding(.horizontal, 56)
-        .padding(.top, 14)
-        .padding(.bottom, 18)
-
-        // Payment + notes + tax id
-        let hasPayment = !invoice.paymentTerms.isEmpty || !invoice.acceptedPayments.isEmpty || !invoice.paymentInstructions.isEmpty
-        if hasPayment || !invoice.notes.isEmpty || !business.taxID.isEmpty {
-            invoicePDFDivider()
-            VStack(alignment: .leading, spacing: 10) {
-                if hasPayment {
-                    VStack(alignment: .leading, spacing: 3) {
-                        invoicePDFLabel("PAYMENT")
-                        if !invoice.paymentTerms.isEmpty {
-                            Text("Terms: \(invoice.paymentTerms)").font(.system(size: 10)).foregroundColor(Color(white: 0.4))
-                        }
-                        if !invoice.acceptedPayments.isEmpty {
-                            Text("Accepted: \(invoice.acceptedPayments)").font(.system(size: 10)).foregroundColor(Color(white: 0.4))
-                        }
-                        if !invoice.paymentInstructions.isEmpty {
-                            Text(invoice.paymentInstructions).font(.system(size: 10)).foregroundColor(Color(white: 0.4))
-                        }
-                    }
-                }
-                if !invoice.notes.isEmpty {
-                    VStack(alignment: .leading, spacing: 3) {
-                        invoicePDFLabel("NOTES")
-                        Text(invoice.notes).font(.system(size: 11)).foregroundColor(Color(white: 0.4))
-                    }
-                }
-                if !business.taxID.isEmpty {
-                    Text("Tax ID / EIN: \(business.taxID)")
-                        .font(.system(size: 9)).foregroundColor(Color(white: 0.55))
-                }
-            }
-            .padding(.horizontal, 56)
-            .padding(.top, 14)
-        }
-    }
-}
-
-private func totalsLine(_ label: String, _ value: String, bold: Bool) -> some View {
-    HStack {
-        Text(label).font(.system(size: 11)).foregroundColor(Color(white: 0.45))
-        Spacer(minLength: 24)
-        Text(value).font(.system(size: 11, weight: bold ? .bold : .medium)).foregroundColor(Color(white: 0.2))
-    }
-    .frame(width: 220)
-}
-
-private func invoiceContinuedIndicator() -> some View {
-    HStack {
-        Spacer()
-        Text("Continued on next page →")
-            .font(.system(size: 9)).foregroundColor(Color(white: 0.6)).italic()
-    }
-    .padding(.horizontal, 56)
-    .padding(.top, 12)
-}
-
-// MARK: - PDF page 1 layout
-
-private struct InvoiceFirstPageLayout: View {
-    let invoice: Invoice
-    let business: BusinessInfo
-    let rows: [InvoicePDFRow]
-    let isLastPage: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header — business info + INVOICE number
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(business.name.isEmpty ? "Freelancer" : business.name)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.black)
-                    if !business.address.isEmpty {
-                        Text(business.address)
-                            .font(.system(size: 10)).foregroundColor(Color(white: 0.45))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if !business.address2.isEmpty {
-                        Text(business.address2)
-                            .font(.system(size: 10)).foregroundColor(Color(white: 0.45))
-                    }
-                    ForEach(business.contactLines, id: \.self) { line in
-                        Text(line).font(.system(size: 10)).foregroundColor(Color(white: 0.45))
-                    }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("INVOICE")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(Color(white: 0.55))
-                        .tracking(2)
-                    Text(invoice.formattedNumber)
-                        .font(.system(size: 26, weight: .black))
-                        .foregroundColor(Color(white: 0.83))
-                }
-            }
-            .padding(.horizontal, 56)
-            .padding(.top, 56)
-            .padding(.bottom, 24)
-
-            invoicePDFDivider()
-
-            // Bill To + meta
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    invoicePDFLabel("BILL TO")
-                    Text(invoice.client?.name ?? "")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.black)
-                    if let company = invoice.client?.companyName, !company.isEmpty {
-                        Text(company).font(.system(size: 11)).foregroundColor(Color(white: 0.4))
-                    }
-                    if let addr = invoice.client?.billingAddress, !addr.isEmpty {
-                        Text(addr).font(.system(size: 10)).foregroundColor(Color(white: 0.45))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let addr2 = invoice.client?.billingAddress2, !addr2.isEmpty {
-                        Text(addr2).font(.system(size: 10)).foregroundColor(Color(white: 0.45))
-                    }
-                    if let email = invoice.client?.email, !email.isEmpty {
-                        Text(email).font(.system(size: 10)).foregroundColor(Color(white: 0.45))
-                    }
-                    if let phone = invoice.client?.phone, !phone.isEmpty {
-                        Text(phone).font(.system(size: 10)).foregroundColor(Color(white: 0.45))
-                    }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 6) {
-                    invoicePDFMeta("Issue Date", invoice.issueDate.formatted(date: .abbreviated, time: .omitted))
-                    invoicePDFMeta("Due Date", invoice.dueDate.formatted(date: .abbreviated, time: .omitted))
-                    if !invoice.poNumber.isEmpty {
-                        invoicePDFMeta("PO Number", invoice.poNumber)
-                    }
-                    if !invoice.paymentTerms.isEmpty {
-                        invoicePDFMeta("Terms", invoice.paymentTerms)
-                    }
-                    invoicePDFMeta("Status", invoice.isPaid ? "Paid" : "Unpaid")
-                }
-            }
-            .padding(.horizontal, 56)
-            .padding(.vertical, 24)
-
-            invoicePDFTableHeader()
-
-            ForEach(rows) { invoicePDFRowView($0) }
-
-            if isLastPage {
-                invoicePDFFooter(invoice: invoice, business: business)
-            } else {
-                invoiceContinuedIndicator()
-            }
-
-            Spacer(minLength: 40)
-        }
-        .frame(width: 612, height: 792)
-        .background(Color.white)
-    }
-}
-
-// MARK: - PDF continuation page layout
-
-private struct InvoiceContinuationPageLayout: View {
-    let invoice: Invoice
-    let business: BusinessInfo
-    let rows: [InvoicePDFRow]
-    let pageNumber: Int
-    let totalPages: Int
-    let isLastPage: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(business.name.isEmpty ? "Freelancer" : business.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.black)
-                    Text(invoice.formattedNumber)
-                        .font(.system(size: 11))
-                        .foregroundColor(Color(white: 0.5))
-                }
-                Spacer()
-                Text("Page \(pageNumber) of \(totalPages)")
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(white: 0.6))
-            }
-            .padding(.horizontal, 56)
-            .padding(.top, 36)
-            .padding(.bottom, 16)
-
-            invoicePDFTableHeader()
-
-            ForEach(rows) { invoicePDFRowView($0) }
-
-            if isLastPage {
-                invoicePDFFooter(invoice: invoice, business: business)
-            } else {
-                invoiceContinuedIndicator()
-            }
-
-            Spacer(minLength: 40)
-        }
-        .frame(width: 612, height: 792)
-        .background(Color.white)
-    }
-}
-
-// MARK: - PDF generation (multi-page)
+// MARK: - PDF generation (delegates to the shared document renderer in DocumentPDF.swift)
 
 @MainActor
 func makeInvoicePDF(invoice: Invoice, userName: String) -> URL? {
+    var meta: [(String, String)] = [
+        ("Issue Date", invoice.issueDate.formatted(date: .abbreviated, time: .omitted)),
+        ("Due Date", invoice.dueDate.formatted(date: .abbreviated, time: .omitted)),
+    ]
+    if !invoice.poNumber.isEmpty { meta.append(("PO Number", invoice.poNumber)) }
+    if !invoice.paymentTerms.isEmpty { meta.append(("Terms", invoice.paymentTerms)) }
+    meta.append(("Status", invoice.isPaid ? "Paid" : "Unpaid"))
+
     let business = BusinessInfo.load(fallbackName: userName)
-    let allRows = invoicePDFRows(for: invoice)
-
-    // Page 1 has a taller business header + bill-to overhead; later pages are compact.
-    let firstPageMax = 6
-    let contPageMax  = 10
-
-    var pageRows: [[InvoicePDFRow]] = []
-    if allRows.count <= firstPageMax {
-        pageRows = [allRows]
-    } else {
-        pageRows.append(Array(allRows.prefix(firstPageMax)))
-        var remaining = Array(allRows.dropFirst(firstPageMax))
-        while !remaining.isEmpty {
-            pageRows.append(Array(remaining.prefix(contPageMax)))
-            remaining = Array(remaining.dropFirst(contPageMax))
-        }
-    }
-
-    let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent("\(invoice.formattedNumber).pdf")
-
-    var box = CGRect(origin: .zero, size: CGSize(width: 612, height: 792))
-    let pdfData = NSMutableData()
-    guard let consumer = CGDataConsumer(data: pdfData),
-          let ctx = CGContext(consumer: consumer, mediaBox: &box, nil)
-    else { return nil }
-
-    let totalPages = pageRows.count
-
-    for (idx, rows) in pageRows.enumerated() {
-        let isLast = idx == totalPages - 1
-        let renderer: ImageRenderer<AnyView>
-        if idx == 0 {
-            renderer = ImageRenderer(content: AnyView(InvoiceFirstPageLayout(
-                invoice: invoice, business: business, rows: rows, isLastPage: isLast
-            )))
-        } else {
-            renderer = ImageRenderer(content: AnyView(InvoiceContinuationPageLayout(
-                invoice: invoice, business: business, rows: rows,
-                pageNumber: idx + 1, totalPages: totalPages, isLastPage: isLast
-            )))
-        }
-        renderer.proposedSize = ProposedViewSize(width: 612, height: 792)
-        renderer.render { _, draw in
-            ctx.beginPDFPage(nil)
-            draw(ctx)
-            ctx.endPDFPage()
-        }
-    }
-
-    ctx.closePDF()
-    try? pdfData.write(to: url)
-    return url
+    let spec = DocumentPDFSpec(
+        business: business,
+        logoData: business.logoData,
+        typeLabel: "INVOICE",
+        number: invoice.formattedNumber,
+        recipientLabel: "BILL TO",
+        recipientName: invoice.client?.name ?? "",
+        recipientCompany: invoice.client?.companyName ?? "",
+        recipientAddress: invoice.client?.billingAddress ?? "",
+        recipientAddress2: invoice.client?.billingAddress2 ?? "",
+        recipientEmail: invoice.client?.email ?? "",
+        recipientPhone: invoice.client?.phone ?? "",
+        meta: meta,
+        rateColumnHeader: "RATE",
+        rows: invoiceDocRows(for: invoice),
+        subtotal: invoice.subtotal,
+        discountAmount: invoice.discountAmount,
+        taxRate: invoice.taxRate,
+        taxAmount: invoice.taxAmount,
+        total: invoice.total,
+        totalLabel: "TOTAL DUE",
+        paymentTerms: invoice.paymentTerms,
+        acceptedPayments: invoice.acceptedPayments,
+        paymentInstructions: invoice.paymentInstructions,
+        notes: invoice.notes,
+        showAcceptanceLine: false
+    )
+    return makeDocumentPDF(spec: spec)
 }

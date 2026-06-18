@@ -1,8 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// The five top-level destinations. Drives the iPhone `TabView` tabs and the
-/// iPad `NavigationSplitView` sidebar so both stay in sync from one source.
+/// The five top-level destinations. Drives the single `TabView` used on both
+/// idioms (bottom tab bar on iPhone, floating top tab bar on iPad) from one source.
 enum AppSection: String, CaseIterable, Identifiable {
     case home, mileage, time, expenses, clients
 
@@ -41,12 +41,14 @@ enum AppSection: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @Environment(TimerState.self) private var timerState
+    @Environment(Entitlements.self) private var pro
 
     @State private var showTimer = false
     @State private var showLogTime = false
     @State private var showLogTrip = false
     @State private var showAddExpense = false
     @State private var showCreateInvoice = false
+    @State private var paywall: ProFeature?
 
     var body: some View {
         // A plain `TabView` renders the bottom tab bar on iPhone and the
@@ -59,6 +61,7 @@ struct ContentView: View {
         .sheet(isPresented: $showLogTrip)       { LogTripView() }
         .sheet(isPresented: $showAddExpense)    { AddExpenseView() }
         .sheet(isPresented: $showCreateInvoice) { InvoiceQuickActionSheet() }
+        .proPaywall($paywall)
         .onChange(of: timerState.pendingWidgetAction) { _, action in
             guard let action else { return }
             timerState.pendingWidgetAction = nil
@@ -67,7 +70,7 @@ struct ContentView: View {
             case .logTime:       showLogTime = true
             case .logTrip:       showLogTrip = true
             case .addExpense:    showAddExpense = true
-            case .createInvoice: showCreateInvoice = true
+            case .createInvoice: if pro.isProEffective { showCreateInvoice = true } else { paywall = .invoicing }
             }
         }
     }
@@ -87,6 +90,7 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(TimerState())
+        .environment(Entitlements())
         .modelContainer(for: [
             Expense.self, Client.self, Project.self,
             TimeEntry.self, MileageTrip.self, IncomeEntry.self

@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 /// First + last name for invoices and exports (read from UserDefaults so non-View code can use it).
 /// The Home greeting deliberately uses only the first name (`user_name`).
@@ -36,9 +37,13 @@ func formatPhoneNumber(_ raw: String) -> String {
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(Entitlements.self) private var pro
+    @Environment(\.modelContext) private var modelContext
+    @AppStorage("invoice_remindersEnabled") private var invoiceRemindersEnabled: Bool = false
     @AppStorage("user_name") private var userName: String = ""
     @AppStorage("user_lastName") private var userLastName: String = ""
     @AppStorage("user_primaryUse") private var primaryUse: String = "Mixed"
+    @AppStorage("user_avatar") private var avatarData: Data = Data()
     @AppStorage("home_sectionOrder") private var sectionOrder: String = HomeSection.defaultOrderString
 
     @AppStorage("mileage_ratePerMile") private var mileageRate: Double = MileageTrip.defaultRatePerMile
@@ -64,7 +69,21 @@ struct SettingsView: View {
     @AppStorage("business_acceptedPayments") private var acceptedPayments: String = ""
     @AppStorage("business_paymentInstructions") private var paymentInstructions: String = ""
 
+    @AppStorage("business_logo") private var logoData: Data = Data()
+
+    // Document numbering
+    @AppStorage("doc_invoicePrefix") private var invoicePrefix: String = "INV-"
+    @AppStorage("doc_quotePrefix") private var quotePrefix: String = "EST-"
+    @AppStorage("doc_numberResetYearly") private var numberResetYearly: Bool = false
+
     private let paymentTermsOptions = ["Due Upon Receipt", "Net 15", "Net 30", "Net 45", "Net 60"]
+
+    /// Live example of the invoice number format for the numbering section footer.
+    private var numberSample: String {
+        let year = Calendar.current.component(.year, from: .now)
+        let prefix = invoicePrefix.isEmpty ? "INV-" : invoicePrefix
+        return numberResetYearly ? "\(prefix)\(year)-001" : "\(prefix)001"
+    }
 
     private let appFocusOptions = ["Time Tracking", "Mileage", "Expenses", "Invoicing"]
 
@@ -86,7 +105,26 @@ struct SettingsView: View {
 
     @State private var exportItem: ExportItem?
     @State private var showTimePresets = false
+    @State private var avatarItem: PhotosPickerItem?
+    @State private var logoItem: PhotosPickerItem?
+    @State private var showPhotoMenu = false
+    @State private var showCamera = false
+    @State private var showLibrary = false
+    @State private var paywall: ProFeature?
+    @State private var showUpgrade = false
     @FocusState private var fieldFocused: Bool
+
+    /// The upgrade banner is the real free → Pro CTA once monetization is live,
+    /// and a paywall preview launcher while it's still dormant (debug only, so it
+    /// never shows to real users in a dormant release build).
+    private var showUpgradeBanner: Bool {
+        if Entitlements.monetizationEnabled { return !pro.isProEffective }
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
 
     // Export date range
     @State private var exportRange: ExportRange = .all
@@ -120,14 +158,319 @@ struct SettingsView: View {
         }
     }
 
-    private var profileInitials: String {
-        let trimmed = userName.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return "?" }
-        let words = trimmed.split(separator: " ")
-        if words.count >= 2 {
-            return String(words[0].prefix(1) + words[1].prefix(1)).uppercased()
+    /// Keyboard "Done" toolbar shared by the text-field sub-pages.
+    @ToolbarContentBuilder
+    private var keyboardDoneToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("Done") {
+                fieldFocused = false
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+                )
+            }
         }
-        return String(trimmed.prefix(2)).uppercased()
+    }
+
+    // MARK: - Business & Invoicing sub-page
+
+    @ViewBuilder private var businessInvoicingPage: some View {
+        List {
+            // MARK: Logo
+            Section {
+                HStack(spacing: 14) {
+                    Group {
+                        if !logoData.isEmpty, let image = UIImage(data: logoData) {
+                            Image(uiImage: image).resizable().scaledToFit()
+                        } else {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color(.systemGray5))
+                                .overlay(
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(.secondary)
+                                )
+                        }
+                    }
+                    .frame(width: 72, height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        PhotosPicker(selection: $logoItem, matching: .images) {
+                            Text(logoData.isEmpty ? "Add Logo" : "Change Logo")
+                                .font(.subheadline)
+                                .foregroundStyle(.indigo)
+                        }
+                        if !logoData.isEmpty {
+                            Button("Remove", role: .destructive) {
+                                logoData = Data()
+                                logoItem = nil
+                            }
+                            .font(.caption)
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+                .onChange(of: logoItem) { _, item in
+                    Task {
+                        if let raw = try? await item?.loadTransferable(type: Data.self),
+                           let processed = UserAvatarImage.processedLogo(raw) {
+                            logoData = processed
+                        }
+                    }
+                }
+            } header: {
+                Text("Logo")
+            } footer: {
+                Text("Appears at the top of the invoices and estimates you generate. A transparent PNG looks best.")
+            }
+
+            Section {
+                businessField("Business Name", text: $businessName, icon: "building.2.fill", color: .indigo)
+                AddressEntryField(label: "Address", line1: $businessAddress, line2: $businessAddress2,
+                                  icon: "mappin.and.ellipse", iconColor: .indigo)
+                businessField("Phone", text: $businessPhone, icon: "phone.fill", color: .indigo, keyboard: .phonePad, isPhone: true)
+                businessField("Email", text: $businessEmail, icon: "envelope.fill", color: .indigo, keyboard: .emailAddress)
+                businessField("Website", text: $businessWebsite, icon: "globe", color: .indigo, keyboard: .URL)
+                businessField("Tax ID / EIN", text: $businessTaxID, icon: "number", color: .indigo)
+            } header: {
+                Text("Business Information")
+            } footer: {
+                Text("Appears as the \"from\" details on invoices you generate.")
+            }
+
+            Section {
+                LabeledContent {
+                    Picker("", selection: $defaultPaymentTerms) {
+                        ForEach(paymentTermsOptions, id: \.self) { Text($0) }
+                    }
+                    .labelsHidden()
+                } label: {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "calendar.badge.clock", color: .purple)
+                        Text("Payment Terms")
+                    }
+                }
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "percent", color: .purple)
+                    Text("Default Sales Tax")
+                    Spacer()
+                    TextField("0.0", value: $defaultTaxRate, format: .number.precision(.fractionLength(2)))
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(width: 56)
+                        .focused($fieldFocused)
+                    Text("%").foregroundStyle(.secondary)
+                }
+                businessField("Accepted Payments", text: $acceptedPayments, icon: "creditcard.fill", color: .purple, axis: .vertical)
+                businessField("Payment Instructions", text: $paymentInstructions, icon: "text.bubble.fill", color: .purple, axis: .vertical)
+            } header: {
+                Text("Invoicing Defaults")
+            } footer: {
+                Text("Pre-filled into each new invoice. You can override them per invoice. Accepted payments e.g. \"Bank transfer, Check, Zelle\".")
+            }
+
+            Section {
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "number", color: .purple)
+                    Text("Invoice Prefix")
+                    Spacer()
+                    TextField("INV-", text: $invoicePrefix)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 110)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.characters)
+                        .focused($fieldFocused)
+                }
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "number", color: .teal)
+                    Text("Estimate Prefix")
+                    Spacer()
+                    TextField("EST-", text: $quotePrefix)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 110)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.characters)
+                        .focused($fieldFocused)
+                }
+                Toggle(isOn: $numberResetYearly) {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "arrow.counterclockwise", color: .orange)
+                        Text("Reset Numbering Yearly")
+                    }
+                }
+            } header: {
+                Text("Document Numbering")
+            } footer: {
+                Text("Example: \(numberSample). Numbers auto-increment; you can still override the number on each document. Yearly reset inserts the year and restarts at 001 each January.")
+            }
+
+            Section {
+                Toggle(isOn: $invoiceRemindersEnabled) {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "bell.badge.fill", color: .orange)
+                        Text("Invoice Due Reminders")
+                    }
+                }
+                .onChange(of: invoiceRemindersEnabled) { _, enabled in
+                    Task { await InvoiceReminders.handleToggle(enabled: enabled, container: modelContext.container) }
+                }
+            } header: {
+                Text("Reminders")
+            } footer: {
+                Text("A local notification the day before and the day an unpaid invoice is due. Overdue invoices also appear on your Home screen.")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollDismissesKeyboard(.immediately)
+        .navigationTitle("Business & Invoicing")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { keyboardDoneToolbar }
+    }
+
+    // MARK: - Rates & Taxes sub-page
+
+    @ViewBuilder private var ratesTaxPage: some View {
+        List {
+            Section {
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "car.fill", color: .blue)
+                    Text("IRS Mileage Rate")
+                    Spacer()
+                    Text("$\(String(format: "%.2f", mileageRate))/mi")
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "clock.fill", color: .indigo)
+                    Text("Default Hourly Rate")
+                    Spacer()
+                    TextField("0.00", value: $defaultHourlyRate, format: .number.precision(.fractionLength(2)))
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(width: 72)
+                        .focused($fieldFocused)
+                }
+            } header: {
+                Text("Rates & Defaults")
+            } footer: {
+                Text("IRS standard mileage rate for 2026. Updated in code each January.")
+            }
+
+            Section {
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "fuelpump.fill", color: .orange)
+                    Text("Vehicle MPG")
+                    Spacer()
+                    TextField("30", value: $mpg, format: .number.precision(.fractionLength(0)))
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(width: 72)
+                        .focused($fieldFocused)
+                }
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "dollarsign.circle.fill", color: .orange)
+                    Text("Gas Price / Gallon")
+                    Spacer()
+                    TextField("3.80", value: $gasPrice, format: .number.precision(.fractionLength(2)))
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(width: 72)
+                        .focused($fieldFocused)
+                }
+            } header: {
+                Text("Fuel")
+            } footer: {
+                Text("Used in Reports to estimate fuel cost vs. mileage reimbursement.")
+            }
+
+            Section {
+                LabeledContent {
+                    Picker("", selection: $businessStructure) {
+                        ForEach(businessStructures, id: \.self) { Text($0) }
+                    }
+                    .labelsHidden()
+                } label: {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "building.columns.fill", color: .green)
+                        Text("Structure")
+                    }
+                }
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "percent", color: .green)
+                    Text("Tax Rate")
+                    Spacer()
+                    TextField("15.3", value: $selfEmploymentRate, format: .number.precision(.fractionLength(1)))
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(width: 52)
+                        .focused($fieldFocused)
+                    Text("%").foregroundStyle(.secondary)
+                }
+                HStack(spacing: 10) {
+                    SettingsIcon(symbol: "chart.line.uptrend.xyaxis", color: .green)
+                    Text("Income Bracket")
+                    Spacer()
+                    TextField("22", value: $incomeBracketRate, format: .number.precision(.fractionLength(1)))
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(width: 52)
+                        .focused($fieldFocused)
+                    Text("%").foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Tax Information")
+            } footer: {
+                Text("Used in Reports to estimate your quarterly tax liability. These are estimates — consult a tax professional for advice.")
+            }
+
+            Section {
+                Toggle(isOn: $taxRemindersEnabled) {
+                    HStack(spacing: 10) {
+                        SettingsIcon(symbol: "bell.badge.fill", color: .orange)
+                        Text("Deadline Reminders")
+                    }
+                }
+                .onChange(of: taxRemindersEnabled) { _, enabled in
+                    Task { await TaxReminders.handleToggle(enabled: enabled) }
+                }
+
+                ForEach(quarterlyDueDates, id: \.date) { payment in
+                    HStack(spacing: 10) {
+                        SettingsIcon(
+                            symbol: payment.isNext ? "calendar.badge.exclamationmark" : "calendar",
+                            color: payment.isNext ? .orange : .gray
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(payment.label)
+                                .font(.subheadline)
+                            Text(payment.period)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(payment.date, format: .dateTime.month(.abbreviated).day())
+                                .font(.subheadline.weight(.medium))
+                            if payment.isNext {
+                                Text(daysUntil(payment.date))
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Quarterly Tax Due Dates")
+            } footer: {
+                Text("IRS estimated tax payment deadlines. Reminders notify you a week before and the day before each deadline. If a date falls on a weekend or holiday the IRS typically extends to the next business day.")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollDismissesKeyboard(.immediately)
+        .navigationTitle("Rates & Taxes")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { keyboardDoneToolbar }
     }
 
     var body: some View {
@@ -137,14 +480,20 @@ struct SettingsView: View {
                 // MARK: Profile header
                 Section {
                     VStack(spacing: 10) {
-                        ZStack {
-                            Circle()
-                                .fill(.indigo.gradient)
-                                .frame(width: 76, height: 76)
-                            Text(profileInitials)
-                                .font(.system(size: 30, weight: .semibold))
-                                .foregroundStyle(.white)
+                        Button { showPhotoMenu = true } label: {
+                            UserAvatar(imageData: avatarData, name: userName, size: 84)
+                                .overlay(alignment: .bottomTrailing) {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 26, height: 26)
+                                        .background(.indigo, in: Circle())
+                                        .overlay(Circle().strokeBorder(Color(.systemGroupedBackground), lineWidth: 2))
+                                }
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Change profile photo")
+
                         VStack(spacing: 2) {
                             Text(userName.trimmingCharacters(in: .whitespaces).isEmpty ? "Add your name" : userName)
                                 .font(.title3.bold())
@@ -158,6 +507,15 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .listRowBackground(Color.clear)
+                }
+
+                // MARK: Upgrade CTA (free → Pro; also the paywall test launcher while dormant)
+                if showUpgradeBanner {
+                    Section {
+                        ProUpgradeBanner { showUpgrade = true }
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowBackground(Color.clear)
+                    }
                 }
 
                 // MARK: Personalization
@@ -216,192 +574,28 @@ struct SettingsView: View {
                     Text("Your first name appears in the Home screen greeting. Your last name is added on invoices and data exports only. Tap the ways you use the app — this tailors your Home screen layout.")
                 }
 
-                // MARK: Business Information
+                // MARK: Configuration (grouped into tappable sub-pages)
                 Section {
-                    businessField("Business Name", text: $businessName, icon: "building.2.fill", color: .indigo)
-                    AddressEntryField(label: "Address", line1: $businessAddress, line2: $businessAddress2,
-                                      icon: "mappin.and.ellipse", iconColor: .indigo)
-                    businessField("Phone", text: $businessPhone, icon: "phone.fill", color: .indigo, keyboard: .phonePad, isPhone: true)
-                    businessField("Email", text: $businessEmail, icon: "envelope.fill", color: .indigo, keyboard: .emailAddress)
-                    businessField("Website", text: $businessWebsite, icon: "globe", color: .indigo, keyboard: .URL)
-                    businessField("Tax ID / EIN", text: $businessTaxID, icon: "number", color: .indigo)
-                } header: {
-                    Text("Business Information")
-                } footer: {
-                    Text("Appears as the \"from\" details on invoices you generate.")
-                }
-
-                // MARK: Invoicing Defaults
-                Section {
-                    LabeledContent {
-                        Picker("", selection: $defaultPaymentTerms) {
-                            ForEach(paymentTermsOptions, id: \.self) { Text($0) }
-                        }
-                        .labelsHidden()
+                    NavigationLink {
+                        businessInvoicingPage
                     } label: {
                         HStack(spacing: 10) {
-                            SettingsIcon(symbol: "calendar.badge.clock", color: .purple)
-                            Text("Payment Terms")
+                            SettingsIcon(symbol: "building.2.fill", color: .indigo)
+                            Text("Business & Invoicing")
                         }
                     }
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "percent", color: .purple)
-                        Text("Default Sales Tax")
-                        Spacer()
-                        TextField("0.0", value: $defaultTaxRate, format: .number.precision(.fractionLength(2)))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
-                            .frame(width: 56)
-                            .focused($fieldFocused)
-                        Text("%").foregroundStyle(.secondary)
-                    }
-                    businessField("Accepted Payments", text: $acceptedPayments, icon: "creditcard.fill", color: .purple, axis: .vertical)
-                    businessField("Payment Instructions", text: $paymentInstructions, icon: "text.bubble.fill", color: .purple, axis: .vertical)
-                } header: {
-                    Text("Invoicing Defaults")
-                } footer: {
-                    Text("Pre-filled into each new invoice. You can override them per invoice. Accepted payments e.g. \"Bank transfer, Check, Zelle\".")
-                }
-
-                // MARK: Rates & Defaults
-                Section {
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "car.fill", color: .blue)
-                        Text("IRS Mileage Rate")
-                        Spacer()
-                        Text("$\(String(format: "%.2f", mileageRate))/mi")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "clock.fill", color: .indigo)
-                        Text("Default Hourly Rate")
-                        Spacer()
-                        TextField("0.00", value: $defaultHourlyRate, format: .number.precision(.fractionLength(2)))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
-                            .frame(width: 72)
-                            .focused($fieldFocused)
-                    }
-                } header: {
-                    Text("Rates & Defaults")
-                } footer: {
-                    Text("IRS standard mileage rate for 2026. Updated in code each January.")
-                }
-
-                // MARK: Fuel
-                Section {
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "fuelpump.fill", color: .orange)
-                        Text("Vehicle MPG")
-                        Spacer()
-                        TextField("30", value: $mpg, format: .number.precision(.fractionLength(0)))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
-                            .frame(width: 72)
-                            .focused($fieldFocused)
-                    }
-
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "dollarsign.circle.fill", color: .orange)
-                        Text("Gas Price / Gallon")
-                        Spacer()
-                        TextField("3.80", value: $gasPrice, format: .number.precision(.fractionLength(2)))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
-                            .frame(width: 72)
-                            .focused($fieldFocused)
-                    }
-                } header: {
-                    Text("Fuel")
-                } footer: {
-                    Text("Used in Reports to estimate fuel cost vs. mileage reimbursement.")
-                }
-
-                // MARK: Tax Information
-                Section {
-                    LabeledContent {
-                        Picker("", selection: $businessStructure) {
-                            ForEach(businessStructures, id: \.self) { Text($0) }
-                        }
-                        .labelsHidden()
+                    NavigationLink {
+                        ratesTaxPage
                     } label: {
                         HStack(spacing: 10) {
-                            SettingsIcon(symbol: "building.columns.fill", color: .green)
-                            Text("Structure")
-                        }
-                    }
-
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "percent", color: .green)
-                        Text("Tax Rate")
-                        Spacer()
-                        TextField("15.3", value: $selfEmploymentRate, format: .number.precision(.fractionLength(1)))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
-                            .frame(width: 52)
-                            .focused($fieldFocused)
-                        Text("%").foregroundStyle(.secondary)
-                    }
-
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "chart.line.uptrend.xyaxis", color: .green)
-                        Text("Income Bracket")
-                        Spacer()
-                        TextField("22", value: $incomeBracketRate, format: .number.precision(.fractionLength(1)))
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
-                            .frame(width: 52)
-                            .focused($fieldFocused)
-                        Text("%").foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Tax Information")
-                } footer: {
-                    Text("Used in Reports to estimate your quarterly tax liability. These are estimates — consult a tax professional for advice.")
-                }
-
-                // MARK: Quarterly Tax Dates
-                Section {
-                    Toggle(isOn: $taxRemindersEnabled) {
-                        HStack(spacing: 10) {
-                            SettingsIcon(symbol: "bell.badge.fill", color: .orange)
-                            Text("Deadline Reminders")
-                        }
-                    }
-                    .onChange(of: taxRemindersEnabled) { _, enabled in
-                        Task { await TaxReminders.handleToggle(enabled: enabled) }
-                    }
-
-                    ForEach(quarterlyDueDates, id: \.date) { payment in
-                        HStack(spacing: 10) {
-                            SettingsIcon(
-                                symbol: payment.isNext ? "calendar.badge.exclamationmark" : "calendar",
-                                color: payment.isNext ? .orange : .gray
-                            )
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(payment.label)
-                                    .font(.subheadline)
-                                Text(payment.period)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(payment.date, format: .dateTime.month(.abbreviated).day())
-                                    .font(.subheadline.weight(.medium))
-                                if payment.isNext {
-                                    Text(daysUntil(payment.date))
-                                        .font(.caption)
-                                        .foregroundStyle(.orange)
-                                }
-                            }
+                            SettingsIcon(symbol: "percent", color: .green)
+                            Text("Rates & Taxes")
                         }
                     }
                 } header: {
-                    Text("Quarterly Tax Due Dates")
+                    Text("Configuration")
                 } footer: {
-                    Text("IRS estimated tax payment deadlines. Reminders notify you a week before and the day before each deadline. If a date falls on a weekend or holiday the IRS typically extends to the next business day.")
+                    Text("Business details for your invoices & estimates, plus mileage, fuel, and tax settings used in Reports.")
                 }
 
                 // MARK: Presets & Quick-Fill
@@ -492,6 +686,58 @@ struct SettingsView: View {
                     Text("Restore deleted items within 30 days. After that they're removed permanently.")
                 }
 
+                // MARK: Freelanced Pro (hidden until the launch switch is flipped)
+                if Entitlements.monetizationEnabled {
+                Section {
+                    if pro.isProEffective {
+                        HStack(spacing: 10) {
+                            SettingsIcon(symbol: "crown.fill", color: .indigo)
+                            Text("Freelanced Pro")
+                            Spacer()
+                            Text("Active")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.green)
+                        }
+                        Link(destination: URL(string: "https://apps.apple.com/account/subscriptions")!) {
+                            HStack(spacing: 10) {
+                                SettingsIcon(symbol: "gearshape.fill", color: .gray)
+                                Text("Manage Subscription").foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    } else {
+                        Button {
+                            Task { await pro.restore() }
+                        } label: {
+                            HStack(spacing: 10) {
+                                SettingsIcon(symbol: "arrow.clockwise", color: .indigo)
+                                Text("Restore Purchases").foregroundStyle(.primary)
+                            }
+                        }
+                    }
+
+                    #if DEBUG
+                    Toggle(isOn: Binding(
+                        get: { pro.debugProOverride },
+                        set: { pro.debugProOverride = $0 }
+                    )) {
+                        HStack(spacing: 10) {
+                            SettingsIcon(symbol: "hammer.fill", color: .orange)
+                            Text("Debug: Force Pro")
+                        }
+                    }
+                    #endif
+                } header: {
+                    Text("Subscription")
+                }
+                }
+
+                // MARK: More from Garben Technologies
+                MoreAppsSection()
+
                 // MARK: App
                 Section("App") {
                     HStack(spacing: 10) {
@@ -517,7 +763,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
+                        Image(systemName: "xmark")
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
                     }
@@ -542,6 +788,40 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showTimePresets) {
                 PresetsView()
+            }
+            .proPaywall($paywall)
+            .sheet(isPresented: $showUpgrade) { PaywallView(context: nil) }
+            .confirmationDialog("Profile Photo", isPresented: $showPhotoMenu, titleVisibility: .visible) {
+                Button("Take Photo") { showCamera = true }
+                Button("Choose from Library") { showLibrary = true }
+                if !avatarData.isEmpty {
+                    Button("Remove Photo", role: .destructive) {
+                        avatarData = Data()
+                        avatarItem = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .photosPicker(isPresented: $showLibrary, selection: $avatarItem, matching: .images)
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraView(
+                    onCapture: { image in
+                        if let data = image.jpegData(compressionQuality: 0.9).flatMap({ UserAvatarImage.processed($0) }) {
+                            avatarData = data
+                        }
+                        showCamera = false
+                    },
+                    onCancel: { showCamera = false }
+                )
+                .ignoresSafeArea()
+            }
+            .onChange(of: avatarItem) { _, item in
+                Task {
+                    if let raw = try? await item?.loadTransferable(type: Data.self),
+                       let processed = UserAvatarImage.processed(raw) {
+                        avatarData = processed
+                    }
+                }
             }
         }
     }
@@ -642,7 +922,11 @@ struct SettingsView: View {
 
     private func exportButton(_ title: String, icon: String, color: Color, scope: ExportScope) -> some View {
         Button {
-            exportItem = ExportItem(csv: buildCSV(scope))
+            if pro.isProEffective {
+                exportItem = ExportItem(csv: buildCSV(scope))
+            } else {
+                paywall = .dataExport
+            }
         } label: {
             HStack(spacing: 10) {
                 SettingsIcon(symbol: icon, color: color)
@@ -774,5 +1058,6 @@ struct SettingsIcon: View {
 
 #Preview {
     SettingsView()
+        .environment(Entitlements())
         .modelContainer(for: [Client.self, Project.self], inMemory: true)
 }

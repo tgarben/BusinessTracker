@@ -91,7 +91,7 @@ struct AddEditClientView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(project.name)
-                                    Text(project.hourlyRate.formatted(.currency(code: "USD")) + "/hr")
+                                    Text(project.hourlyRate.formatted(AppCurrency.style) + "/hr")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }

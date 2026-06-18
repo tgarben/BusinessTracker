@@ -101,7 +101,7 @@ struct ExpenseEditView: View {
                                         Button {
                                             receiptImages.remove(at: index)
                                         } label: {
-                                            Image(systemName: "xmark.circle.fill")
+                                            Image(systemName: "xmark")
                                                 .font(.system(size: 20))
                                                 .symbolRenderingMode(.palette)
                                                 .foregroundStyle(.white, .black.opacity(0.55))

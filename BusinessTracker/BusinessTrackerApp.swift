@@ -5,6 +5,7 @@ import WidgetKit
 @main
 struct BusinessTrackerApp: App {
     @State private var timerState = TimerState()
+    @State private var entitlements = Entitlements()
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     private static let sharedModelContainer: ModelContainer = {
@@ -18,6 +19,8 @@ struct BusinessTrackerApp: App {
             IncomeEntry.self,
             Invoice.self,
             InvoiceLineItem.self,
+            Quote.self,
+            QuoteLineItem.self,
             MileagePreset.self,
             ExpensePreset.self,
         ])
@@ -40,21 +43,27 @@ struct BusinessTrackerApp: App {
             if hasCompletedOnboarding {
                 ContentView()
                     .environment(timerState)
+                    .environment(entitlements)
                     .onOpenURL { url in handleWidgetDeepLink(url) }
                     .task {
                         CloudKeyValueSync.start()
                         Self.purgeExpiredTrash()
                         consumePendingShortcutAction()
+                        await entitlements.refresh()
                         await TaxReminders.reschedule()
+                        await InvoiceReminders.reschedule(container: Self.sharedModelContainer)
                     }
                     .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                         timerState.syncFromSharedStore()
                         consumePendingShortcutAction()
                         WidgetCenter.shared.reloadAllTimelines()
                         Self.purgeExpiredTrash()
+                        Task { await entitlements.refresh() }
+                        Task { await InvoiceReminders.reschedule(container: Self.sharedModelContainer) }
                     }
             } else {
                 OnboardingView()
+                    .environment(entitlements)
                     .task { CloudKeyValueSync.start() }
             }
         }
@@ -81,6 +90,7 @@ struct BusinessTrackerApp: App {
         purge(FetchDescriptor<Expense>(predicate: #Predicate { $0.deletedDate != nil }))
         purge(FetchDescriptor<IncomeEntry>(predicate: #Predicate { $0.deletedDate != nil }))
         purge(FetchDescriptor<Invoice>(predicate: #Predicate { $0.deletedDate != nil }))
+        purge(FetchDescriptor<Quote>(predicate: #Predicate { $0.deletedDate != nil }))
         purge(FetchDescriptor<Client>(predicate: #Predicate { $0.deletedDate != nil }))
 
         try? context.save()

@@ -278,7 +278,7 @@ struct ReportsView: View {
                 glanceItem(value: String(format: "%.1f", totalHours), unit: "hrs",
                            label: "Hours", color: .indigo)
                 Divider().frame(height: 44)
-                glanceItem(value: totalEarnings.formatted(.currency(code: "USD")), unit: nil,
+                glanceItem(value: totalEarnings.asCurrency, unit: nil,
                            label: "Earned", color: .indigo)
             }
             Divider()
@@ -286,15 +286,15 @@ struct ReportsView: View {
                 glanceItem(value: String(format: "%.1f", totalMiles), unit: "mi",
                            label: "Miles", color: .blue)
                 Divider().frame(height: 44)
-                glanceItem(value: totalReimbursement.formatted(.currency(code: "USD")), unit: nil,
+                glanceItem(value: totalReimbursement.asCurrency, unit: nil,
                            label: "Reimbursement", color: .blue)
             }
             Divider()
             HStack(spacing: 0) {
-                glanceItem(value: totalIncome.formatted(.currency(code: "USD")), unit: nil,
+                glanceItem(value: totalIncome.asCurrency, unit: nil,
                            label: "Income", color: .green)
                 Divider().frame(height: 44)
-                glanceItem(value: totalExpenses.formatted(.currency(code: "USD")), unit: nil,
+                glanceItem(value: totalExpenses.asCurrency, unit: nil,
                            label: "Expenses", color: .red)
             }
         }
@@ -324,10 +324,10 @@ struct ReportsView: View {
             // Gross income
             taxSectionHeader("Gross Income")
             if totalEarnings > 0 {
-                taxRow(label: "Time Earnings", value: totalEarnings.formatted(.currency(code: "USD")), color: .indigo)
+                taxRow(label: "Time Earnings", value: totalEarnings.asCurrency, color: .indigo)
             }
             if totalIncome > 0 {
-                taxRow(label: "Income Received", value: totalIncome.formatted(.currency(code: "USD")), color: .green)
+                taxRow(label: "Income Received", value: totalIncome.asCurrency, color: .green)
             }
 
             // Deductions
@@ -336,10 +336,10 @@ struct ReportsView: View {
                 taxSectionHeader("Deductions")
                 if mileageDeduction > 0 {
                     let milesLabel = String(format: "%.0f mi × $%.2f/mi", totalMiles, MileageTrip.ratePerMile)
-                    taxRow(label: "Mileage (\(milesLabel))", value: "−\(mileageDeduction.formatted(.currency(code: "USD")))", color: .green)
+                    taxRow(label: "Mileage (\(milesLabel))", value: "−\(mileageDeduction.asCurrency)", color: .green)
                 }
                 if totalExpenses > 0 {
-                    taxRow(label: "Business Expenses", value: "−\(totalExpenses.formatted(.currency(code: "USD")))", color: .green)
+                    taxRow(label: "Business Expenses", value: "−\(totalExpenses.asCurrency)", color: .green)
                 }
             }
 
@@ -349,7 +349,7 @@ struct ReportsView: View {
                 Text("Taxable Income")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(taxableIncome.formatted(.currency(code: "USD")))
+                Text(taxableIncome.asCurrency)
                     .font(.subheadline.weight(.semibold))
             }
             .padding(.horizontal, 16)
@@ -359,11 +359,11 @@ struct ReportsView: View {
             Divider().padding(.horizontal, 16)
             taxRow(
                 label: "Tax Rate (\(seRate.formatted(.number.precision(.fractionLength(1))))%)",
-                value: seAmount.formatted(.currency(code: "USD")), color: .primary
+                value: seAmount.asCurrency, color: .primary
             )
             taxRow(
                 label: "Income Tax (\(bracketRate.formatted(.number.precision(.fractionLength(1))))%)",
-                value: incomeTaxAmount.formatted(.currency(code: "USD")), color: .primary
+                value: incomeTaxAmount.asCurrency, color: .primary
             )
 
             // Set-aside total
@@ -377,7 +377,7 @@ struct ReportsView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
-                Text(totalSetAside.formatted(.currency(code: "USD")))
+                Text(totalSetAside.asCurrency)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.orange)
                     .padding(.horizontal, 10)
@@ -433,7 +433,7 @@ struct ReportsView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
-                Text(mileageDeduction.formatted(.currency(code: "USD")))
+                Text(mileageDeduction.asCurrency)
                     .font(.title3.weight(.bold))
                     .foregroundStyle(.blue)
             }
@@ -498,7 +498,7 @@ struct ReportsView: View {
             HStack(spacing: 0) {
                 fuelInputChip(value: String(format: "%.0f", mpg), label: "MPG", icon: "fuelpump.fill")
                 fuelDivider()
-                fuelInputChip(value: gasPrice.formatted(.currency(code: "USD")), label: "Per Gallon", icon: "dollarsign.circle.fill")
+                fuelInputChip(value: gasPrice.asCurrency, label: "Per Gallon", icon: "dollarsign.circle.fill")
                 fuelDivider()
                 fuelInputChip(value: String(format: "%.1f gal", estimatedGallons), label: "Est. Used", icon: "drop.fill")
             }
@@ -507,8 +507,8 @@ struct ReportsView: View {
             Divider().padding(.horizontal, 16)
 
             VStack(spacing: 0) {
-                fuelBreakdownRow(label: "IRS Reimbursement", value: totalReimbursement.formatted(.currency(code: "USD")), color: .primary)
-                fuelBreakdownRow(label: "Estimated Fuel Cost", value: "−\(estimatedFuelCost.formatted(.currency(code: "USD")))", color: .red)
+                fuelBreakdownRow(label: "IRS Reimbursement", value: totalReimbursement.asCurrency, color: .primary)
+                fuelBreakdownRow(label: "Estimated Fuel Cost", value: "−\(estimatedFuelCost.asCurrency)", color: .red)
             }
             .padding(.vertical, 4)
 
@@ -518,7 +518,7 @@ struct ReportsView: View {
                 Text("Net Profit")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(netMileage.formatted(.currency(code: "USD")))
+                Text(netMileage.asCurrency)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(netMileage >= 0 ? .green : .red)
                     .padding(.horizontal, 10)
@@ -604,7 +604,7 @@ private struct ClientReportRow: View {
                 }
                 .frame(height: 5)
                 Spacer(minLength: 12)
-                Text(earnings.formatted(.currency(code: "USD")))
+                Text(earnings.asCurrency)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -633,7 +633,7 @@ private struct ClientPLReportRow: View {
             HStack {
                 Text(data.name).font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(data.net.formatted(.currency(code: "USD")))
+                Text(data.net.asCurrency)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(data.net >= 0 ? .green : .red)
                     .padding(.horizontal, 8)
@@ -643,15 +643,15 @@ private struct ClientPLReportRow: View {
 
             HStack(spacing: 10) {
                 if data.timeEarnings > 0 {
-                    Label(data.timeEarnings.formatted(.currency(code: "USD")), systemImage: "clock.fill")
+                    Label(data.timeEarnings.asCurrency, systemImage: "clock.fill")
                         .foregroundStyle(.indigo)
                 }
                 if data.incomeReceived > 0 {
-                    Label(data.incomeReceived.formatted(.currency(code: "USD")), systemImage: "dollarsign.circle.fill")
+                    Label(data.incomeReceived.asCurrency, systemImage: "dollarsign.circle.fill")
                         .foregroundStyle(.green)
                 }
                 if data.expenses > 0 {
-                    Label(data.expenses.formatted(.currency(code: "USD")), systemImage: "minus.circle.fill")
+                    Label(data.expenses.asCurrency, systemImage: "minus.circle.fill")
                         .foregroundStyle(.red)
                 }
             }
@@ -778,7 +778,7 @@ struct ReportPDFLayout: View {
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
                     glanceRow("Hours Worked", String(format: "%.1f hrs", data.totalHours), color: Color(red: 0.4, green: 0.3, blue: 0.9))
-                    glanceRow("Time Earned", data.totalEarnings.formatted(.currency(code: "USD")), color: Color(red: 0.4, green: 0.3, blue: 0.9))
+                    glanceRow("Time Earned", data.totalEarnings.asCurrency, color: Color(red: 0.4, green: 0.3, blue: 0.9))
                     glanceRow("Miles Driven", String(format: "%.1f mi", data.totalMiles), color: Color(red: 0.2, green: 0.5, blue: 0.9))
                 }
                 .frame(maxWidth: .infinity)
@@ -786,9 +786,9 @@ struct ReportPDFLayout: View {
                 Rectangle().fill(Color(white: 0.88)).frame(width: 1, height: 72)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    glanceRow("IRS Reimbursement", data.totalReimbursement.formatted(.currency(code: "USD")), color: Color(red: 0.2, green: 0.5, blue: 0.9))
-                    glanceRow("Income Received", data.totalIncome.formatted(.currency(code: "USD")), color: Color(red: 0.2, green: 0.65, blue: 0.3))
-                    glanceRow("Business Expenses", data.totalExpenses.formatted(.currency(code: "USD")), color: Color(red: 0.85, green: 0.25, blue: 0.25))
+                    glanceRow("IRS Reimbursement", data.totalReimbursement.asCurrency, color: Color(red: 0.2, green: 0.5, blue: 0.9))
+                    glanceRow("Income Received", data.totalIncome.asCurrency, color: Color(red: 0.2, green: 0.65, blue: 0.3))
+                    glanceRow("Business Expenses", data.totalExpenses.asCurrency, color: Color(red: 0.85, green: 0.25, blue: 0.25))
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -801,19 +801,19 @@ struct ReportPDFLayout: View {
 
                 pdfRow(
                     label: String(format: "IRS Deduction  (%.1f mi × $%.3f/mi)", data.totalMiles, data.ratePerMile),
-                    value: data.mileageDeduction.formatted(.currency(code: "USD")),
+                    value: data.mileageDeduction.asCurrency,
                     valueColor: Color(red: 0.2, green: 0.5, blue: 0.9)
                 )
                 if data.mpg > 0 {
                     let gallons = data.totalMiles / data.mpg
                     pdfRow(
                         label: String(format: "Est. Fuel Cost  (%.1f gal × $%.2f/gal)", gallons, data.gasPrice),
-                        value: "−\(data.estimatedFuelCost.formatted(.currency(code: "USD")))",
+                        value: "−\(data.estimatedFuelCost.asCurrency)",
                         valueColor: Color(red: 0.7, green: 0.2, blue: 0.2)
                     )
                     pdfRow(
                         label: "Net Mileage Profit",
-                        value: (data.totalReimbursement - data.estimatedFuelCost).formatted(.currency(code: "USD")),
+                        value: (data.totalReimbursement - data.estimatedFuelCost).asCurrency,
                         valueColor: .black
                     )
                 }
@@ -824,12 +824,12 @@ struct ReportPDFLayout: View {
                 fullDivider
                 pdfSectionLabel("TAX ESTIMATE")
 
-                pdfRow(label: "Gross Income (time + income)", value: data.grossIncome.formatted(.currency(code: "USD")))
+                pdfRow(label: "Gross Income (time + income)", value: data.grossIncome.asCurrency)
                 if data.mileageDeduction > 0 {
-                    pdfRow(label: "Mileage Deduction", value: "−\(data.mileageDeduction.formatted(.currency(code: "USD")))", valueColor: Color(red: 0.2, green: 0.55, blue: 0.3))
+                    pdfRow(label: "Mileage Deduction", value: "−\(data.mileageDeduction.asCurrency)", valueColor: Color(red: 0.2, green: 0.55, blue: 0.3))
                 }
                 if data.totalExpenses > 0 {
-                    pdfRow(label: "Business Expenses", value: "−\(data.totalExpenses.formatted(.currency(code: "USD")))", valueColor: Color(red: 0.2, green: 0.55, blue: 0.3))
+                    pdfRow(label: "Business Expenses", value: "−\(data.totalExpenses.asCurrency)", valueColor: Color(red: 0.2, green: 0.55, blue: 0.3))
                 }
 
                 // Taxable income divider row
@@ -838,7 +838,7 @@ struct ReportPDFLayout: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.black)
                     Spacer()
-                    Text(data.taxableIncome.formatted(.currency(code: "USD")))
+                    Text(data.taxableIncome.asCurrency)
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.black)
                 }
@@ -848,11 +848,11 @@ struct ReportPDFLayout: View {
 
                 pdfRow(
                     label: String(format: "Tax Rate (%.1f%%)", data.seRate),
-                    value: data.seAmount.formatted(.currency(code: "USD"))
+                    value: data.seAmount.asCurrency
                 )
                 pdfRow(
                     label: String(format: "Income Tax (%.1f%%)", data.bracketRate),
-                    value: data.incomeTaxAmount.formatted(.currency(code: "USD"))
+                    value: data.incomeTaxAmount.asCurrency
                 )
 
                 HStack {
@@ -860,7 +860,7 @@ struct ReportPDFLayout: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.black)
                     Spacer()
-                    Text(data.totalSetAside.formatted(.currency(code: "USD")))
+                    Text(data.totalSetAside.asCurrency)
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(Color(red: 0.9, green: 0.5, blue: 0.1))
                 }
@@ -894,7 +894,7 @@ struct ReportPDFLayout: View {
                             .font(.system(size: 9))
                             .foregroundColor(Color(white: 0.5))
                             .frame(width: 56, alignment: .trailing)
-                        Text(client.earnings.formatted(.currency(code: "USD")))
+                        Text(client.earnings.asCurrency)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.black)
                             .frame(width: 72, alignment: .trailing)

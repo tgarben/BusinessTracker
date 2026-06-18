@@ -68,7 +68,7 @@ struct MileageView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "person.crop.circle")
+                        Image(systemName: "person.fill")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -133,7 +133,7 @@ struct MileageSummaryCard: View {
         HStack(spacing: 0) {
             summaryItem(value: String(format: "%.1f", miles), unit: "mi", label: label)
             Divider().frame(height: 40)
-            summaryItem(value: reimbursement.formatted(.currency(code: "USD")), unit: nil, label: "Reimbursement")
+            summaryItem(value: reimbursement.asCurrency, unit: nil, label: "Reimbursement")
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
@@ -206,7 +206,7 @@ struct TripRow: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Text(trip.reimbursementAmount.formatted(.currency(code: "USD")))
+                Text(trip.reimbursementAmount.asCurrency)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
             }

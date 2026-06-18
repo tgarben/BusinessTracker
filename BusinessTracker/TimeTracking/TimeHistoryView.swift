@@ -41,7 +41,7 @@ struct TimeHistoryView: View {
                                     .foregroundStyle(.secondary)
                                 Text("·")
                                     .foregroundStyle(.tertiary)
-                                Text(earnings, format: .currency(code: "USD"))
+                                Text(earnings, format: AppCurrency.style)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

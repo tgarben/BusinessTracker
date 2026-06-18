@@ -21,6 +21,7 @@ enum CloudKeyValueSync {
         "user_name",
         "user_lastName",
         "user_primaryUse",
+        "user_avatar",          // downscaled JPEG thumbnail (Data) — see UserAvatarImage
 
         // Business information + invoicing defaults
         "business_name",
@@ -34,6 +35,12 @@ enum CloudKeyValueSync {
         "business_defaultPaymentTerms",
         "business_acceptedPayments",
         "business_paymentInstructions",
+        "business_logo",        // downscaled PNG (Data) — see UserAvatarImage.processedLogo
+
+        // Document numbering
+        "doc_invoicePrefix",
+        "doc_quotePrefix",
+        "doc_numberResetYearly",
 
         // Rates, fuel & tax defaults
         "mileage_ratePerMile",

@@ -8,7 +8,7 @@ A SwiftUI app for small business owners and contract workers to track time, mile
 - **UI:** SwiftUI
 - **Persistence:** SwiftData + CloudKit (private database, syncs across devices when signed into iCloud)
 - **Target:** iOS 26 minimum (use iOS 26 APIs freely)
-- **Future platforms:** macOS (not yet). **iPad: supported** — `ContentView` branches on `horizontalSizeClass`: iPhone (`.compact`) uses the bottom `TabView`; iPad (`.regular`) uses a `NavigationSplitView` (sidebar + detail). See the iPad section.
+- **Future platforms:** macOS (not yet). **iPad: supported** — `ContentView` uses a single plain `TabView` (no size-class branching): bottom tab bar on iPhone, App Store-style floating top tab bar on iPad. See the iPad section.
 - **Git:** Local only (`main` branch), no remote configured
 
 ## Project location
@@ -33,15 +33,15 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 | Invoicing | ✅ Done (full professional invoice: business info from Settings, customer billing details from Client, time entries + manual line items w/ qty/unit price, discount, sales tax, payment terms/instructions/methods, PO#, multi-page PDF, paid/unpaid, Create Invoice quick action) |
 | Settings & Profile | ✅ Done (Profile page with avatar header; presets management; all config sections) |
 | Recently Deleted (soft-delete) | ✅ Done (30-day trash + restore for all six record types; Settings → Recently Deleted) |
-| iCloud Sync | ✅ Done (confirmed working on device 2026-06-13) |
-| Quote / Estimate generator | ⬜ Planned (Jack's idea — pre-sale counterpart to invoicing; reuse line items, business/customer info, PDF; "convert to invoice" action) |
+| iCloud Sync | ✅ Done. Dev-environment sync confirmed on device 2026-06-13. **Production schema deployed 2026-06-17** (Development → Production via "Deploy Schema Changes…"), including all `CD_*` types plus `CD_Quote`/`CD_QuoteLineItem` — TestFlight/App Store builds now sync. Reminder: any future new `@Model` or new field requires running the build on a device (to register it in the Development schema) then re-deploying Dev → Production before that build ships. |
+| Quote / Estimate generator | ✅ Done (Jack's idea — pre-sale counterpart to invoicing; manual line items, business/customer info, multi-page PDF with acceptance line, status workflow, "Accept & convert to invoice"; Estimates section per client + Create Estimate quick action) |
 | Package Tracking | ⬜ Future (API integration) |
 | Home Screen Widgets | ✅ Done (medium 4-action + small single-action quick-action widgets; read-only Quarterly Tax Due Dates widget; Live Activity on timer start) |
 | Live Activities | ✅ Done (Dynamic Island + lock screen banner while timer runs; starts when app foregrounds after widget tap) |
 | Lock Screen Actions | ⬜ Deferred (built and removed — requires server push-to-start to launch Live Activity without opening app; revisit when MRR justifies Firebase Blaze) |
 | Shortcuts / Siri | ✅ Done (App Intents for Start Timer, Log Time, Log Trip, Add Expense; auto-registered AppShortcuts with Siri phrases) |
 | Tax deadline reminders | ✅ Done (opt-in local notifications a week + day before each quarterly IRS deadline) |
-| Pro tier (paid) | ⬜ Future |
+| Pro tier (paid) | 🟡 Scaffolded — provider-agnostic `Entitlements` boundary + `PaywallView` + feature gates wired at all entry points; store layer is a **stub** (`StubStoreProvider`). Drop in StoreKit 2 or RevenueCat behind `StoreProvider` to go live. See Monetization section. |
 
 ---
 
@@ -57,11 +57,13 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 
 ## Data models
 
-- **`Client`** — `name`, `photoData: Data? = nil`, plus billing/customer fields `companyName`, `billingAddress`, `email`, `phone` (all `String = ""`, shown as "bill to" on invoices). Relationships: `projects` (cascade delete), `timeEntries` (nullify), `incomeEntries` (nullify), `expenses` (nullify), `timePresets` (nullify), `invoices` (cascade delete).
+- **`Client`** — `name`, `photoData: Data? = nil`, plus billing/customer fields `companyName`, `billingAddress`, `email`, `phone` (all `String = ""`, shown as "bill to" on invoices). Relationships: `projects` (cascade delete), `timeEntries` (nullify), `incomeEntries` (nullify), `expenses` (nullify), `timePresets` (nullify), `invoices` (cascade delete), `quotes` (cascade delete).
 - **`Project`** — `name`, `hourlyRate`, belongs to `Client`
 - **`TimeEntry`** — `date`, `client?`, `project?`, `hours`, `hourlyRate` (snapshot), `notes`, `invoice?` (nullify on invoice delete)
-- **`Invoice`** — `invoiceNumber: Int`, `issueDate`, `dueDate`, `notes`, `isPaid: Bool`, `paidDate?`, `additionalAmount`/`additionalDescription` (legacy single extra, kept for migration), `discountAmount: Double`, `taxRate: Double` (percent), `paymentTerms`, `paymentInstructions`, `acceptedPayments`, `poNumber`, `client?`, `timeEntries` (nullify), `lineItems` (cascade → `InvoiceLineItem`). Computed: `subtotal` (time earnings + line items + legacy extra), `discountedSubtotal` (subtotal − discount), `taxAmount` (discounted × taxRate%), `total` (final amount due), `formattedNumber` = "INV-001". PDF via `ImageRenderer` → `makeInvoicePDF()`. **`subtotal` is pre-tax/discount; use `total` for the amount due** (InvoiceRow + detail show `total`).
+- **`Invoice`** — `invoiceNumber: Int`, `issueDate`, `dueDate`, `notes`, `isPaid: Bool`, `paidDate?`, `additionalAmount`/`additionalDescription` (legacy single extra, kept for migration), `discountAmount: Double`, `taxRate: Double` (percent), `paymentTerms`, `paymentInstructions`, `acceptedPayments`, `poNumber`, `client?`, `timeEntries` (nullify), `lineItems` (cascade → `InvoiceLineItem`). Computed: `subtotal` (time earnings + line items + legacy extra), `discountedSubtotal` (subtotal − discount), `taxAmount` (discounted × taxRate%), `total` (final amount due), `formattedNumber` = "INV-001", `isOverdue`/`daysOverdue` (unpaid + `dueDate` before today). PDF via `ImageRenderer` → `makeInvoicePDF()`. **`subtotal` is pre-tax/discount; use `total` for the amount due** (InvoiceRow + detail show `total`).
 - **`InvoiceLineItem`** — manual invoice line: `itemDescription`, `quantity: Double`, `unitPrice: Double`, `sortOrder`, `invoice?`. Computed `lineTotal = quantity × unitPrice`. Coexists with time-entry billing.
+- **`Quote`** — pre-sale estimate paralleling `Invoice` (SoftDeletable). `quoteNumber: Int`, `issueDate`, `validUntil` (instead of dueDate), `notes`, `status: String` (raw `QuoteStatus`: Draft/Sent/Accepted/Declined/Expired), `convertedInvoiceNumber: Int` (0 = not converted), `discountAmount`, `taxRate`, `paymentTerms`/`paymentInstructions`/`acceptedPayments`, `poNumber`, `client?`, cascade `lineItems: [QuoteLineItem]`. Computed `subtotal`/`discountedSubtotal`/`taxAmount`/`total` (same math as Invoice, **manual line items only — no time entries**), `formattedNumber` = "EST-001", `statusValue`, `displayStatus` (surfaces Expired when `validUntil` passed on an open quote, without mutating stored status), `isConverted`. `QuoteStatus` enum (icon + color) lives in `Quote.swift`.
+- **`QuoteLineItem`** — manual quote line: `itemDescription`, `quantity`, `unitPrice`, `sortOrder`, `quote?`. Computed `lineTotal`. **Kept distinct from `InvoiceLineItem`** (not shared) because SwiftData relationships need a single owning inverse — on "convert to invoice" the items are copied into fresh `InvoiceLineItem`s.
 - **`TimePreset`** — `name`, `client?`, `project?`, `sortOrder`, `hourlyRateOverride?`, `notesTemplate`
 - **`MileageTrip`** — `date`, `startLocation`/`endLocation` (short display labels from `shortAddress`), `startAddress`/`endAddress` (full addresses for CSV export, captured via `fullAddress(_:)` at save), `miles`, `purpose`, `notes`, `waypoints: [String] = []` (intermediate stops, in order). Computed `reimbursementAmount` using `ratePerMile` (IRS rate, currently 0.70), `allStops`, `routeDescription`, `startAddressForExport`/`endAddressForExport` (full address, else display label for older trips).
 - **`MileagePreset`** / **`ExpensePreset`** — standalone saved templates (no relationships). MileagePreset: `name`, `startLocation`, `endLocation`, `purpose`, `notes`, `sortOrder`. ExpensePreset: `name`, `amount: Double?` (nil = variable), `category`, `notes`, `sortOrder`. Registered in the app Schema. Managed from Settings → Presets & Quick-Fill.
@@ -90,7 +92,7 @@ SwiftData models sync via CloudKit, but **business info, profile, and financial 
 - **`CloudKeyValueSync.start()`** is called from `BusinessTrackerApp` on both the main `.task` and the onboarding `.task` (so a 2nd device pre-fills onboarding from iCloud). Idempotent.
 - **Direction:** observes `NSUbiquitousKeyValueStore.didChangeExternallyNotification` (pull iCloud→`UserDefaults`, which `@AppStorage` re-renders from) and `UserDefaults.didChangeNotification` (push local→iCloud). An `isApplyingRemoteChange` guard prevents feedback loops.
 - **Launch merge:** pull (remote wins on conflict) then push (uploads local-only keys). Keys never set by the user are absent from `UserDefaults` (still at `@AppStorage` default) so they're skipped — a local default never clobbers a remote value.
-- **Synced keys** (`CloudKeyValueSync.syncedKeys`): `user_name`, `user_lastName`, `user_primaryUse`; all `business_*` (incl. invoicing defaults); `mileage_ratePerMile`, `default_hourlyRate`, `report_mpg`, `report_gasPrice`, `tax_selfEmploymentRate`, `tax_incomeBracketRate`, `tax_businessStructure`; `mileage_purposePresets`, `mileage_favoriteAddresses`.
+- **Synced keys** (`CloudKeyValueSync.syncedKeys`): `user_name`, `user_lastName`, `user_primaryUse`, `user_avatar` (downscaled JPEG `Data`); all `business_*` (incl. invoicing defaults); `mileage_ratePerMile`, `default_hourlyRate`, `report_mpg`, `report_gasPrice`, `tax_selfEmploymentRate`, `tax_incomeBracketRate`, `tax_businessStructure`; `mileage_purposePresets`, `mileage_favoriteAddresses`.
 - **Intentionally NOT synced** (device-specific): `home_*` layout/section order, widget config, notification toggles (`tax_remindersEnabled`, `expense_presetInstantSave`), `hasCompletedOnboarding`.
 - **Entitlement:** `com.apple.developer.ubiquity-kvstore-identifier = $(TeamIdentifierPrefix)com.garbenTechnologies.BusinessTracker` added to `BusinessTracker.entitlements`. Like CloudKit, only works on a real device signed into iCloud.
 - **To add a new synced setting:** append its key to `CloudKeyValueSync.syncedKeys`. Only property-list scalars (String/Double/Bool/Data) sync cleanly.
@@ -122,7 +124,7 @@ When a returning user installs on a new device, onboarding pre-fills from the iC
 - **Personalized greeting:** "Good morning, Jack" — reads `@AppStorage("user_name")`
 - **Reorderable sections:** Three sections (Quick Actions, Today, This Week) stored as an ordered comma-separated string in `@AppStorage("home_sectionOrder")`. Active timer card is always pinned at top.
 - **Configurable quick actions:** Enabled actions + order stored in `@AppStorage("home_quickActionOrder")` and `@AppStorage("home_quickActionEnabled")`. Defined by `QuickAction` enum in `HomeView.swift`.
-- **Quick Actions:** Start Timer (indigo), Log Time (indigo), Log Trip (blue), Add Expense (red), Create Invoice (purple). 2-wide `LazyVGrid` of individually rounded cards.
+- **Quick Actions:** Start Timer (indigo), Log Time (indigo), Log Trip (blue), Add Expense (red), Create Invoice (purple), Create Estimate (teal). 2-wide `LazyVGrid` of individually rounded cards.
 - **Zero quick actions:** if `home_quickActionEnabled` is empty, the Quick Actions section is completely hidden from the home screen. In `HomeLayoutEditor`, the Quick Actions row in Section Order shows "No actions enabled" in tertiary text and its drag handle is hidden.
 - **Customize Home sheet:** `slider.horizontal.3` toolbar button → `HomeLayoutEditor` sheet. Always in edit mode (`.constant(.active)`). Two sections: Section Order (drag to reorder) and Quick Actions (toggle + drag to reorder). Done saves, Cancel discards. No minimum action count enforced.
 - **Reports button:** `chart.bar` toolbar button (top-right, alongside customize button) → `ReportsView` as a sheet with `.presentationDragIndicator(.visible)`
@@ -217,7 +219,37 @@ When a returning user installs on a new device, onboarding pre-fills from the iC
 - **Line items = time entries + manual `InvoiceLineItem`s.** Time-entry billing (select unbilled entries) is unchanged; manual line items add arbitrary products/services with description, quantity, unit price. The PDF merges both into one table via `invoicePDFRows(for:)` → `[InvoicePDFRow]`.
 - **Totals:** `subtotal` → minus `discountAmount` → `discountedSubtotal` → plus `taxAmount` (`taxRate%`) → `total`. New invoices pre-fill tax rate / terms / accepted payments / instructions from the business defaults (editable per invoice).
 - **`CreateInvoiceContent`** pre-fills on first `onAppear` only (guarded by `didPrefill`) so user edits aren't clobbered. `DraftLineItem` is the editing struct; valid drafts (non-empty description + non-zero total) become `InvoiceLineItem`s on save.
-- **PDF** (`makeInvoicePDF`): multi-page, letter size. `BusinessInfo.load(fallbackName:)` reads the business `@AppStorage` keys from `UserDefaults.standard` (falls back to `user_name`). `firstPageMax = 6` rows (taller header), `contPageMax = 10`. Footer (totals + payment + notes + tax ID) renders on the last page only.
+- **Preview-on-create:** `save()` persists (`modelContext.save()` so the render sees finalized relationships), generates the PDF, and presents **`DocumentPreviewView`** (`Views/DocumentPreviewView.swift`, PDFKit + ShareLink) via `.sheet(item: $preview)`. Closing the preview (`onDismiss`) dismisses the create form. Same pattern in `CreateQuoteContent`. So creating an invoice/estimate drops the user straight into a shareable preview of the finished document.
+- **PDF** (`makeInvoicePDF`): multi-page, letter size. `BusinessInfo.load(fallbackName:)` reads the business `@AppStorage` keys from `UserDefaults.standard` (falls back to `user_name`) including the optional **logo** (`business_logo` Data → `BusinessInfo.logoData` → `DocumentPDFSpec.logoData`, rendered top-left of the header). `firstPageMax = 6` rows (taller header), `contPageMax = 10`. Footer (totals + payment + notes + tax ID) renders on the last page only.
+
+## Monetization / Pro tier — scaffolding (store layer not yet wired)
+
+Freemium model scaffolded but **not yet revenue-generating** — the store layer is a stub. Decided: freemium with monthly/annual subscriptions + a lifetime one-time unlock (see the monetization brief). RevenueCat vs native StoreKit 2 is deferred; the architecture is provider-agnostic so either slots in behind one protocol.
+
+- **⚑ Master launch switch: `Entitlements.monetizationEnabled` (currently `false`).** While `false`, monetization is fully **dormant** — `isProEffective` always returns `true`, so every feature is unlocked, no paywall ever appears, the client cap is off, and the Settings "Subscription" section is hidden. This lets the app be developed/tested with zero paywall friction. **Flip to `true` only at App Store submission, and only after a real `StoreProvider` is wired** (shipping `true` with `StubStoreProvider` would show a fake paywall to real users).
+- **`Pro/Entitlements.swift`:**
+  - **`Entitlements`** — `@MainActor @Observable` single source of truth, injected at the app root (`BusinessTrackerApp`) via `.environment(entitlements)` on both ContentView and OnboardingView; read with `@Environment(Entitlements.self)`. `refresh()` is called on launch `.task` and on foreground. Feature code checks **`isProEffective`** (never `isPro` directly — `isProEffective` folds in the DEBUG override).
+  - **`StoreProvider` protocol** — the seam RevenueCat **or** StoreKit 2 implements (`isProActive()`, `purchase(_:)`, `restore()`). `Entitlements` talks only to this, so swapping providers never touches gating code. Currently backed by **`StubStoreProvider`** which simulates a successful purchase (so the paywall→unlock flow is testable) — **replace before shipping.**
+  - **`ProPlan`** (monthly/annual/lifetime) — placeholder prices + `productID`s (`com.garbenTechnologies.BusinessTracker.pro.*`, TODO confirm in App Store Connect). Real localized prices come from the store layer.
+  - **`ProFeature`** (invoicing/quotes/reports/dataExport/unlimitedClients) — the gated capabilities; carries title/blurb/icon for paywall context.
+  - **DEBUG override:** `debugProOverride` (persisted to `debug_proOverride` UserDefaults) + a "Debug: Force Pro" toggle in Settings (DEBUG only) to exercise gated vs. ungated flows without the store.
+- **`Pro/PaywallView.swift`** — branded upgrade sheet (feature list + plan picker + subscribe/restore). Takes an optional `ProFeature` for a tailored header ("Unlock Invoicing"). Driven entirely through `Entitlements`. Also defines **`ProUpgradeBanner`** — the gradient free→Pro CTA card.
+- **Upgrade CTA / paywall launcher:** `ProUpgradeBanner` sits at the **top of Settings, under the profile header** (`SettingsView.showUpgradeBanner`). It's the real free→Pro CTA once monetization is live (`monetizationEnabled && !isProEffective`), and a **paywall preview launcher in DEBUG builds while monetization is dormant** (so it never shows to real users in a dormant release build). One button serving both roles. The lower "Subscription" section (shown only when `monetizationEnabled`) holds status / Restore Purchases / the DEBUG force-Pro toggle.
+- **Gating pattern (one line per call site):** each gated container holds `@State private var paywall: ProFeature?`, attaches the **`.proPaywall($paywall)`** modifier (a `View` extension wrapping `.sheet(item:)`), and buttons do `if pro.isProEffective { action } else { paywall = .feature }`. Local presentation (not a single global sheet) so it works correctly even when triggered from inside other sheets. **To gate a new feature: add a `ProFeature` case + that one-liner.**
+- **Gated entry points wired:** Home quick actions (Create Invoice/Estimate) + Reports toolbar button (`HomeView`/`HomeSectionCard`); widget/Shortcut Create-Invoice route (`ContentView`); Client detail Invoices + Estimates `+` buttons (`ClientDetailView`); new-client FAB past the free cap (`ClientsView`, `Entitlements.freeClientLimit = 2`, `canCreateClient(currentCount:)`); Settings CSV export buttons. **Free vs Pro split** matches the brief: tracking stays free; invoicing/quotes/reports/export/unlimited-clients are Pro.
+- **Not gated (deliberate):** iCloud sync — it's structural (SwiftData CloudKit container), can't be cleanly per-feature gated yet; revisit if sync becomes a Pro differentiator. Also: real Terms of Use / Privacy Policy URLs in the paywall footer are TODO (required by App Review).
+
+## Quotes / Estimates — key decisions & current state
+
+The pre-sale counterpart to Invoicing (Jack's idea). Mirrors invoicing infrastructure but for work that hasn't happened yet.
+
+- **Models:** `Quote` + `QuoteLineItem` (see Data models). Manual line items only — no time-entry billing. Registered in the app Schema + `purgeExpiredTrash` (soft-delete, 30-day trash like invoices). `Client.quotes` is a cascade relationship (only cascades at permanent purge, same as invoices).
+- **Views** (`TimeTracking/QuoteView.swift`): `QuoteRow` (status-colored, teal totals), `CreateQuoteView`/`CreateQuoteContent` (form: Quote For / details / line items / totals / payment terms / notes — pre-fills tax & terms from business defaults on first `onAppear`, guarded by `didPrefill`), `QuoteQuickActionSheet` (client picker → create, for the Home quick action), `QuoteDetailView` (status `Picker`, PDF `ShareLink`, **Accept & Convert to Invoice**).
+- **Status workflow:** `QuoteStatus` Draft → Sent → Accepted/Declined; `displayStatus` derives **Expired** when an open quote's `validUntil` passes. Set via a menu picker in `QuoteDetailView`; changing it invalidates the cached PDF.
+- **Convert to Invoice:** `QuoteDetailView.convertToInvoice()` creates a new `Invoice` (next number from an invoices `@Query`), copies discount/tax/terms/PO/notes + each `QuoteLineItem` → fresh `InvoiceLineItem`, sets `quote.status = Accepted` + `convertedInvoiceNumber`, then presents the new `InvoiceDetailView`. Guarded behind a confirmation dialog.
+- **PDF** (`makeQuotePDF` in QuoteView.swift): builds a `DocumentPDFSpec` and calls the **shared `makeDocumentPDF`** (`Views/DocumentPDF.swift`) — the same renderer invoices use. "ESTIMATE" header, "Valid Until" meta, status, and an **acceptance/signature line** (Accepted By / Date, via `showAcceptanceLine`). Earlier this duplicated the invoice PDF; unified 2026-06-18.
+- **Auto-Sent on share:** sharing an estimate (from `QuoteDetailView` or the create-time preview) advances Draft → Sent, but only on a genuine send — `ActivityShareSheet` + `ShareOutcome.wasSent` exclude Save to Files/Photos/Copy/Print so saving locally doesn't count.
+- **Access:** Estimates section in `ClientDetailView` (above Invoices — create/view/soft-delete) + a **Create Estimate** Home quick action (`QuickAction.createQuote`, teal, `list.clipboard.fill`). No widget/Shortcut entry point (deliberately scoped out).
 
 ## Income Tracking — key decisions & current state
 
@@ -240,7 +272,10 @@ When a returning user installs on a new device, onboarding pre-fills from the iC
 
 ## Settings & Profile — key decisions & current state
 
-- **Titled "Profile"** with a centered avatar header at the top (indigo gradient circle + initials from `user_name`, name, and "<PrimaryUse> · Freelanced" subtitle). `profileInitials` computed in `SettingsView`. Still presented as a sheet from the gear icon.
+- **Titled "Profile"** with a centered avatar header at the top — a tappable `PhotosPicker` wrapping `UserAvatar` (uploaded photo, else indigo gradient circle + initials), with a camera badge + "Remove Photo" button. Below: name and "<AppFocus> · Freelanced" subtitle. Still presented as a sheet from the gear icon.
+- **Profile picture:** `UserAvatar` (`Settings/UserAvatar.swift`) is the user's own avatar (indigo — distinct from the teal `ClientAvatar`). Stored in `@AppStorage("user_avatar")` as a **downscaled JPEG thumbnail** (`UserAvatarImage.processed` → longest edge ≤256px, JPEG q0.7) so it fits the iCloud key-value store quota; `user_avatar` is in `CloudKeyValueSync.syncedKeys` so it follows the user across devices. Tapping the avatar opens a **`confirmationDialog` with Take Photo (`CameraView` full-screen cover) / Choose from Library (`.photosPicker(isPresented:)`) / Remove Photo** (the last only when a photo is set; clears back to initials). The onboarding About You page has a simpler direct `PhotosPicker` (falls back to the `OnboardingBadge` person glyph when unset).
+- **Condensed layout:** the long config sections are grouped behind two `NavigationLink` sub-pages (computed `@ViewBuilder` props on `SettingsView`, so they keep the same `@AppStorage`/`@FocusState`/helpers — no state moved): **Business & Invoicing** (`businessInvoicingPage` — Logo + Business Information + Invoicing Defaults + Document Numbering) and **Rates & Taxes** (`ratesTaxPage` — Rates & Defaults + Fuel + Tax Information + Quarterly Tax Dates). Both reuse `keyboardDoneToolbar`. The top level keeps the profile header, upgrade banner, Personalization, Presets & Quick-Fill, Data Export, Recently Deleted, Subscription, More Apps, and App sections.
+- **More from Garben Technologies** section (`Settings/MoreAppsView.swift`): promotes the studio's other apps (`GarbenApps.all`). Each `PromotedApp` row is a rounded app-icon tile (`iconAsset` image if present, else SF Symbol fallback via `UIImage(named:) != nil` guard) + name/tagline + a trailing CTA. Link resolution (`PromotedApp.link`): **`appStoreURL` → "Get" pill → App Store**; else **`testFlightURL` → "Beta" pill (airplane icon) → TestFlight**; else **"Coming soon"** (not tappable). CradleLight is live (App Store URL + `cradleLightLogo` asset). Sipfolio is TestFlight-only — paste its public `https://testflight.apple.com/join/…` link into `testFlightURL`. Taglines still marked TODO to confirm. **To add/promote an app: append to `GarbenApps.all` with an `appStoreURL` or `testFlightURL` (and optionally an `iconAsset` image in Assets).**
 - **Business Information** section (name, address, phone, email, website, tax ID/EIN) + **Invoicing Defaults** (payment terms picker, default sales tax %, accepted payments, payment instructions) — all `@AppStorage`, pulled into invoices. `businessField(...)` helper renders the labeled multiline text rows.
 - **Presets & Quick-Fill section** links to Trip Purposes, Mileage Presets, and Expense Presets editors.
 - Accessed via gear icon (top-left toolbar) on every screen — not a tab
@@ -284,13 +319,13 @@ When a returning user installs on a new device, onboarding pre-fills from the iC
 
 ## Recently Deleted (soft-delete) — key decisions & current state
 
-The six user-facing record types — **TimeEntry, MileageTrip, Expense, IncomeEntry, Invoice, Client** — use **soft-delete**: deleting sets `deletedDate = .now` instead of removing the row. Items live in a 30-day "Recently Deleted" area, can be restored, and are permanently purged after 30 days.
+The seven user-facing record types — **TimeEntry, MileageTrip, Expense, IncomeEntry, Invoice, Quote, Client** — use **soft-delete**: deleting sets `deletedDate = .now` instead of removing the row. Items live in a 30-day "Recently Deleted" area, can be restored, and are permanently purged after 30 days.
 
-- **`SoftDeletable` protocol** (`Models/SoftDeletable.swift`): `var deletedDate: Date? { get set }` + `trashDaysRemaining` computed helper (0...30). All six in-scope models conform and declare `var deletedDate: Date? = nil` (CloudKit-safe optional with default).
+- **`SoftDeletable` protocol** (`Models/SoftDeletable.swift`): `var deletedDate: Date? { get set }` + `trashDaysRemaining` computed helper (0...30). All seven in-scope models conform and declare `var deletedDate: Date? = nil` (CloudKit-safe optional with default).
 - **Every `@Query` for these types filters `deletedDate == nil`** so trashed items vanish from all normal lists, pickers, reports, exports, and aggregates. Predicate-`init` queries (ClientDetailView, CreateInvoiceContent, the Month-detail views) AND `&& deletedDate == nil` into their existing predicate.
 - **Relationship-array totals must also filter** — `ClientCell` computes earnings/hours from `client.timeEntries`/`incomeEntries` directly, so those sites use `.filter { $0.deletedDate == nil }`. (Invoice line items in `InvoiceDetailView`/PDF intentionally do NOT filter — an issued invoice is a finalized snapshot.)
 - **Delete sites set `deletedDate = .now`** instead of `modelContext.delete(...)`. Exceptions that remain hard-delete: `TimePreset` (PresetsView), `Project` (AddEditClientView inline), and the eager-insert cancel path in AddEditClientView (`modelContext.delete(client)` discards an unsaved client).
-- **`RecentlyDeletedView`** (`Settings/RecentlyDeletedView.swift`): six `@Query`s filtered to `deletedDate != nil`, merged into a unified sorted list. Swipe leading = Restore (`deletedDate = nil`), swipe trailing = Delete permanently (`modelContext.delete`). "Delete All" toolbar button. Shows "Nd left" per row (orange when ≤3 days). Reached via Settings → Data Management → Recently Deleted.
+- **`RecentlyDeletedView`** (`Settings/RecentlyDeletedView.swift`): seven `@Query`s filtered to `deletedDate != nil`, merged into a unified sorted list. Swipe leading = Restore (`deletedDate = nil`), swipe trailing = Delete permanently (`modelContext.delete`). "Delete All" toolbar button. Shows "Nd left" per row (orange when ≤3 days). Reached via Settings → Data Management → Recently Deleted.
 - **Purge:** `BusinessTrackerApp.purgeExpiredTrash()` runs on launch (`.task`) and on foreground. Fetches each type where `deletedDate != nil`, hard-deletes any older than 30 days. For a Client this fires the real cascade (projects + invoices) at purge time — matching the original hard-delete semantics.
 - **Client soft-delete does NOT cascade during the 30-day window** — only the client's own `deletedDate` is set; its projects/invoices/entries are untouched until permanent purge. Restore brings the client back fully intact (better than the old hard-delete, which orphaned entries via nullify). Trade-off: a soft-deleted client's child records (time/income/expenses) remain visible in global lists during the window, consistent with the old nullify behavior where they survived client deletion.
 
@@ -343,6 +378,8 @@ BusinessTracker/
 │   ├── IncomeEntry.swift            (date, source, amount, notes, client?)
 │   ├── Invoice.swift                (number, dates, isPaid, discount, taxRate, paymentTerms/instructions/accepted, poNumber, client?, timeEntries, lineItems; subtotal/discountedSubtotal/taxAmount/total)
 │   ├── InvoiceLineItem.swift        (manual line: itemDescription, quantity, unitPrice, sortOrder, invoice? — lineTotal computed)
+│   ├── Quote.swift                  (estimate paralleling Invoice: quoteNumber, validUntil, status, convertedInvoiceNumber, totals; QuoteStatus enum)
+│   ├── QuoteLineItem.swift          (manual quote line — distinct from InvoiceLineItem, copied on convert)
 │   ├── MileagePreset.swift          (saved route template: name, start, end, purpose, notes, sortOrder — no relationships)
 │   ├── ExpensePreset.swift          (saved expense template: name, amount: Double?, category, notes, sortOrder — no relationships)
 │   ├── SoftDeletable.swift          (protocol: deletedDate + trashDaysRemaining — TimeEntry/MileageTrip/Expense/IncomeEntry/Invoice/Client conform)
@@ -362,7 +399,8 @@ BusinessTracker/
 │   ├── AddEditProjectView.swift
 │   ├── PresetsView.swift
 │   ├── (AddEditPresetView is inside PresetsView.swift)
-│   └── InvoiceView.swift            (InvoiceRow, CreateInvoiceView/CreateInvoiceContent, InvoiceQuickActionSheet, InvoiceDetailView, MarkPaidSheet, InvoiceFirstPageLayout, InvoiceContinuationPageLayout, makeInvoicePDF())
+│   ├── InvoiceView.swift            (InvoiceRow, CreateInvoiceView/CreateInvoiceContent, InvoiceQuickActionSheet, InvoiceDetailView, MarkPaidSheet, InvoiceFirstPageLayout, InvoiceContinuationPageLayout, makeInvoicePDF())
+│   └── QuoteView.swift              (QuoteRow, CreateQuoteView/CreateQuoteContent, QuoteQuickActionSheet, QuoteDetailView w/ convert-to-invoice, makeQuotePDF())
 ├── Mileage/
 │   ├── AddressSearcher.swift        (AddressSearcher, LocationManager, LocationResult, shortAddress, calculateDrivingMiles single + multi-leg)
 │   ├── AddressSearchView.swift      (current location row + Favorites + Recent + MKLocalSearchCompletion results; star to favorite)
@@ -385,13 +423,21 @@ BusinessTracker/
 ├── Settings/
 │   ├── SettingsView.swift           (Profile header, Personalization, Rates & Defaults, Fuel, Tax Information, Quarterly Tax Dates + reminders toggle, Presets & Quick-Fill, Data Export, Recently Deleted, App — titled "Profile")
 │   ├── TaxReminders.swift           (local-notification scheduler for quarterly deadlines — opt-in, rescheduled on launch)
+│   ├── InvoiceReminders.swift       (local-notification scheduler for unpaid invoice due dates — opt-in, takes ModelContainer to fetch invoices)
+│   ├── UserAvatar.swift             (user's own avatar view + UserAvatarImage downscale helper — user_avatar @AppStorage)
+│   ├── MoreAppsView.swift           (PromotedApp + GarbenApps.all + MoreAppsSection — "More from Garben Technologies")
 │   └── RecentlyDeletedView.swift    (30-day trash — restore / permanent delete across all six soft-deleted types)
 ├── Shortcuts/
 │   └── AppShortcuts.swift           (Siri/Shortcuts App Intents: StartTimer/LogTime/LogTrip/LogExpense + FreelancedShortcuts provider)
+├── Pro/
+│   ├── Entitlements.swift           (Entitlements @Observable + isProEffective, ProPlan, ProFeature, StoreProvider seam + StubStoreProvider, .proPaywall modifier)
+│   └── PaywallView.swift            (branded upgrade sheet — feature list, plan picker, subscribe/restore; provider-agnostic)
 ├── Onboarding/
 │   └── OnboardingView.swift         (5 pages: welcome, about you, location, notifications, ready)
 └── Views/
     ├── IncomeView.swift              (IncomeRow + IncomeEditView — shared components used by ClientDetailView)
+    ├── DocumentPDF.swift             (unified invoice+estimate PDF: DocumentPDFSpec + DocPDFRow + makeDocumentPDF; both makeInvoicePDF/makeQuotePDF feed it)
+    ├── DocumentPreviewView.swift     (PDFKit preview + Share/Done + "created" toast; shown after creating an invoice/estimate. PreviewDoc, SharePDF, ActivityShareSheet, ShareOutcome)
     ├── ReportsView.swift             (3×2 glance card, fuel analysis, tax set-aside, top clients — opened as sheet from Home)
     └── PlaceholderView.swift
 
@@ -409,22 +455,54 @@ FreelancedWidget/                    (WidgetKit extension target)
 
 ## What's left to build
 
-**Planned features (not started):**
-- **Quote / Estimate generator** (Jack's idea) — let users create professional quotes/estimates for prospective work *before* it's done (pre-sale counterpart to an invoice). Should closely mirror Invoicing and reuse its infrastructure:
-  - New `Quote` SwiftData model paralleling `Invoice` (`quoteNumber`, `issueDate`, `validUntil` instead of `dueDate`, `notes`, `discountAmount`, `taxRate`, `paymentTerms`, `poNumber`, `client?`, cascade `lineItems: [InvoiceLineItem]`-style). Quotes are manual line items only (description/qty/unit price) — no time-entry billing, since the work hasn't happened yet. Add a `status` (Draft / Sent / Accepted / Declined / Expired).
-  - Reuse `BusinessInfo` (business header), `Client` billing details ("Quote For"), the line-item editor, and the totals math (subtotal → discount → tax → total).
-  - PDF: clone the `makeInvoicePDF` multi-page approach with a `QUOTE` / `ESTIMATE` header, "Valid until" date, and an optional acceptance/signature line. Likely a shared PDF layout parameterized by document type to avoid duplication.
-  - **Quote → Invoice conversion:** key value-add — an "Accept & convert to invoice" action that copies the quote's line items into a new `Invoice`. This is the main reason to share `InvoiceLineItem`.
-  - Access: a new section in `ClientDetailView` (Quotes, above/below Invoices) + a "Create Quote" Home quick action and `WidgetQuickAction`/Shortcut, mirroring "Create Invoice".
-  - Consider a unified "Documents" tab or grouping if Quotes + Invoices both live under each client.
+**Optional follow-ups (Quotes is now shipped — see Quotes / Estimates section):**
+- **Quote widget/Shortcut entry point** — deliberately scoped out of the first cut. To add: a `WidgetQuickAction.createQuote` case (mirror in the widget extension's duplicated enum) + a `LogQuoteShortcut` App Intent routing `createQuote`.
+- **Shared PDF layout** — `makeQuotePDF` currently duplicates the invoice PDF helpers rather than sharing a document-type-parameterized layout. Worth unifying if a third document type appears.
+- **Promoted app data** — `GarbenApps.all` (CradleLight, Sipfolio) ships with placeholder taglines + TODO App Store URLs; fill in real URLs/icons before release.
+- **Unified "Documents" grouping** — consider grouping Quotes + Invoices under each client if the two lists get long.
 
 **Remaining / future:**
 - **Lock screen widgets** — deferred until Firebase Blaze (or equivalent server) is justified by MRR. Full design in the Widgets section.
 - **Package Tracking** — future, needs carrier API integration.
-- **Pro tier (paid)** — future, StoreKit.
+- **Pro tier (paid)** — scaffolded (see Monetization section). Remaining: implement a real `StoreProvider` (StoreKit 2 or RevenueCat), create the products in App Store Connect, add Terms/Privacy URLs to the paywall, and decide the final free-client cap. Then it's live.
 - **macOS** — future. **iPad is now supported** (NavigationSplitView, see iPad section); remaining iPad polish (true 3-column drill-down, multi-window) is optional/future.
 
 _(Shipped: Jack's full feedback batch — Reports PDF export, mileage deduction card, trip purpose presets, location favorites, multi-stop routes, mileage/expense presets, prominent timer-sheet presets button, Quarterly Tax widget, Settings→Profile redesign — plus Recently Deleted, Siri & Shortcuts, tax deadline reminders, and "Create Invoice" as a default Home quick action. See feature sections.)_
+
+---
+
+## ⚑ Pre-launch checklist & backlog
+
+Consolidated list to work through before App Store submission. (Reviewed 2026-06-17.)
+
+### 🔴 Must-do before App Store launch
+- [ ] **Wire a real `StoreProvider`** (StoreKit 2 or RevenueCat) and create the products in App Store Connect (IDs `com.garbenTechnologies.BusinessTracker.pro.{monthly,annual,lifetime}`). Replaces `StubStoreProvider`. See Monetization section.
+- [ ] **Flip `Entitlements.monetizationEnabled` → `true`** (only after the real store layer is in). It's the master switch in `Pro/Entitlements.swift`.
+- [ ] **On-device pass of the gated flows** after flipping the switch — paywall → purchase → unlock never ran during dormant testing. Test in TestFlight with a sandbox Apple ID.
+- [ ] **Real Terms of Use (EULA) + Privacy Policy URLs** — paywall footer has TODO placeholders, and the App Store listing requires both (camera/location/photos perms make a privacy policy mandatory).
+- [ ] **App Store privacy nutrition labels** — declare camera, location, photos (and "Purchases" / third-party data if you choose RevenueCat).
+- [ ] **Finish `GarbenApps.all`** (`Settings/MoreAppsView.swift`) — CradleLight is live (App Store URL + `cradleLightLogo` asset); still need Sipfolio's public `testFlightURL` (and later its App Store URL), plus confirmed taglines + the `cradleLightLogo` image actually added to Assets.
+- [ ] **Paywall trial copy** — the subscribe button shows "Start Free Trial" for monthly too; only claim a trial on plans you actually configure one for in App Store Connect (currently only annual's subtitle promises one).
+- [ ] **Lock the free-client cap** — `Entitlements.freeClientLimit` (currently 2). Loosening later is easy; tightening causes revolts.
+- [ ] **Real app icon** — onboarding `OnboardingBadge`, the widget, and the Live Activity `TimerAppBadge` still use SF Symbol placeholders.
+- [ ] **Verify CloudKit Production round-trip on a 2nd device** for the new `CD_Quote`/`CD_QuoteLineItem` types + `user_avatar` (schema deployed 2026-06-17).
+- [ ] **Decide monetization model** — freemium (current scaffolding) vs. whole-app subscription. Either reuses the same `Entitlements`/`StoreProvider`/`PaywallView`; only gate *placement* changes (per-feature gates vs. one app-root `.fullScreenCover`). Cheap to flip even post-launch.
+
+### 🟡 Highest-value features (post-scaffold, roughly in priority order)
+1. ✅ **Logo on invoices/estimates** — done. Business logo upload in Settings → Business & Invoicing (`business_logo`, downscaled PNG via `UserAvatarImage.processedLogo`, synced through `CloudKeyValueSync`). `BusinessInfo.load` reads it; `DocumentPDFSpec.logoData` renders it at the top-left of the PDF header (above the business name, capped 200×52pt) for both document types.
+2. ✅ **Overdue invoice tracking + reminders** — done. `Invoice.isOverdue`/`daysOverdue` (unpaid + `dueDate` before today). `InvoiceRow`/`InvoiceDetailView` show a 3-state badge (Paid green / Overdue red / Unpaid orange). Home shows a pinned **`OverdueInvoicesCard`** (count + total outstanding) → **`OverdueInvoicesView`** sheet listing them. Opt-in local notifications via **`InvoiceReminders`** (`Settings/InvoiceReminders.swift`, day-before + due-day at 9am, rescheduled on launch/foreground, `invoice_remindersEnabled` toggle in Business & Invoicing → Reminders; device-local, NOT iCloud-synced).
+3. **"Pay now" link on invoices** — even just a configurable Stripe / PayPal.me URL printed on the PDF. Low effort, big "get paid faster" value.
+4. **Duplicate / clone** an invoice or estimate ("same as last month").
+5. **Currency setting** — `AppCurrency.code` is hardcoded `"USD"` with a one-line path to an `@AppStorage` setting; opens up non-US users.
+6. **Quote widget/Shortcut entry point** — deliberately scoped out of the first cut (see Monetization/Quotes notes for how to add).
+
+### 🟢 Smaller polish
+- ✅ **Quick-action dismiss wart** — fixed. `CreateInvoiceContent`/`CreateQuoteContent` take an `onComplete` closure; the quick-action picker passes its sheet `dismiss` so the flow closes fully instead of popping to the picker.
+- **Free-tier usage hint** — show "2 of 2 clients" so the cap isn't a surprise paywall (better conversion, less frustration). _(still TODO)_
+- ✅ **Accessibility labels** — added on the main icon-only controls (Home toolbar, Clients FAB + settings, client-detail section `+`s, share / mark-paid, avatar picker). Remaining minor controls (Time/Mileage/Expenses history + FABs) could still use labels.
+- ✅ **Auto-status on share** — sharing an estimate now bumps Draft → Sent, but **only on a real send**. Uses `ActivityShareSheet` (UIActivityViewController completion handler) + `ShareOutcome.wasSent` to exclude Save to Files / Photos / Copy / Print, so saving to device does NOT mark it Sent.
+- ✅ **Document numbering** — configurable in Settings → Document Numbering: invoice/estimate prefix (`doc_invoicePrefix`/`doc_quotePrefix`) + per-year reset (`doc_numberResetYearly`, inserts the year and restarts at 001). `Invoice.formatted(number:issueDate:)` / `Quote.formatted(...)` statics read these; next-number logic is year-scoped when reset is on. Synced via `CloudKeyValueSync`.
+- ✅ **Unified PDF** — `makeInvoicePDF` and `makeQuotePDF` now both build a `DocumentPDFSpec` and call the shared `makeDocumentPDF` in `Views/DocumentPDF.swift`. The ~400 lines of duplicated layout are gone. **⚠️ The invoice layout was preserved 1:1; verify one invoice + one estimate PDF render correctly on device since the renderer can't be eyeballed from a build.**
 
 ---
 
@@ -526,6 +604,8 @@ _(Shipped: Jack's full feedback batch — Reports PDF export, mileage deduction 
 - `TimerState.stop()` clears client/project — always capture them into locals before calling it
 - `Text +` concatenation is deprecated in iOS 26 — use string interpolation instead
 - `Decimal(string:)` used for amount parsing from text fields — handles currency input safely. Strip any `$` prefix before passing if the field displays one.
+- **Currency formatting is centralized** in `Models/AppCurrency.swift`. Use `someDouble.asCurrency` (→ `"$1,234.56"`) for display strings, or `AppCurrency.style` as a `FormatStyle` (e.g. `Text(value, format: AppCurrency.style)`, or `value.formatted(AppCurrency.style)` when concatenating). The currency code lives only in `AppCurrency.code` (currently `"USD"`) — point that at an `@AppStorage` setting to make currency configurable app-wide. Do **not** reintroduce inline `.currency(code: "USD")`.
+- **New files in synchronized folder groups need a clean build:** adding a file mid-session (e.g. `AppCurrency.swift`) can make an *incremental* build emit spurious cascade errors in unrelated files (notably `@Model` types looking like they "don't conform to Identifiable") because a batch compiles before the new file's symbols are visible. Run `xcodebuild ... clean build` to confirm — the errors vanish.
 - `Color.tertiary` doesn't exist as a `Color` — use `.foregroundStyle(.tertiary)` or `AnyShapeStyle(.tertiary)` when mixing with `Color` in a ternary
 - `scrollDismissesKeyboard(.immediately)` must be added to every `Form` that contains text fields — applied to all sheets app-wide
 - `ToolbarSpacer(placement:)` is an iOS 26 API — use it to break Liquid Glass grouping between toolbar items in the same placement
@@ -551,6 +631,6 @@ _(Shipped: Jack's full feedback batch — Reports PDF export, mileage deduction 
 - **`ForEach` with `AppEnum` — use `id: \.offset`, not `id: \.rawValue`** — if the user picks the same action for multiple slots, `id: \.rawValue` collapses duplicates into a single cell. Wrap with `Array(actions.enumerated())` and use `id: \.offset`.
 - **Widget extensions cannot start Live Activities** — `Activity<T>.request()` must be called from the main app process. Widget `AppIntent.perform()` can write to shared App Group UserDefaults; the main app calls `TimerState.syncFromSharedStore()` on foreground which reads that value and starts the Live Activity. There is no way to show the Live Activity immediately on widget tap without a server-side ActivityKit push-to-start (APNs `apns-push-type: liveactivity`).
 - **`TimerActivityAttributes` is duplicated across two targets** — the main app (`BusinessTracker/Models/TimerActivityAttributes.swift`) and widget extension (`FreelancedWidget/FreelancedLiveActivity.swift`) are separate Swift modules and cannot share the type. The struct must be kept identical in both files; a comment in each file calls this out.
-- **Multi-page invoice PDF uses multiple `ImageRenderer` renders into one `CGContext`** — call `ctx.beginPDFPage(nil)` / `draw(ctx)` / `ctx.endPDFPage()` per page, then `ctx.closePDF()`. Each page is a separate `ImageRenderer` with its own SwiftUI layout (`InvoiceFirstPageLayout` max 7 items, `InvoiceContinuationPageLayout` max 10). Do not try to render all pages in a single `ImageRenderer`.
+- **Multi-page document PDF uses multiple `ImageRenderer` renders into one `CGContext`** — call `ctx.beginPDFPage(nil)` / `draw(ctx)` / `ctx.endPDFPage()` per page, then `ctx.closePDF()`. Each page is a separate `ImageRenderer` with its own SwiftUI layout (`DocumentFirstPageLayout` max 6 rows, `DocumentContinuationPageLayout` max 10) in `Views/DocumentPDF.swift`. Do not try to render all pages in a single `ImageRenderer`. **Invoices and estimates now share this one renderer** via `DocumentPDFSpec`; `makeInvoicePDF`/`makeQuotePDF` just build a spec.
 - **`CreateInvoiceView` wraps `CreateInvoiceContent`** — `CreateInvoiceContent` is a private struct holding all form state and the body. `CreateInvoiceView(client:)` just wraps it in a `NavigationStack`. `InvoiceQuickActionSheet` shows a client picker that pushes to `CreateInvoiceContent` directly, reusing the same form without duplication.
-- **Soft-delete: any NEW `@Query` for TimeEntry/MileageTrip/Expense/IncomeEntry/Invoice/Client MUST filter `deletedDate == nil`** — there is no global query scope in SwiftData, so a forgotten filter makes trashed items reappear. Simple form: `@Query(filter: #Predicate<T> { $0.deletedDate == nil }, sort: ...)`. Predicate-`init` form: AND `&& $0.deletedDate == nil` into the predicate. Any code summing a **relationship array** (e.g. `client.timeEntries`) must `.filter { $0.deletedDate == nil }` too. To trash a record set `deletedDate = .now` (never `modelContext.delete`, except for the hard-delete exceptions: TimePreset, Project, and the AddEditClientView eager-insert cancel). See the Recently Deleted section.
+- **Soft-delete: any NEW `@Query` for TimeEntry/MileageTrip/Expense/IncomeEntry/Invoice/Quote/Client MUST filter `deletedDate == nil`** — there is no global query scope in SwiftData, so a forgotten filter makes trashed items reappear. Simple form: `@Query(filter: #Predicate<T> { $0.deletedDate == nil }, sort: ...)`. Predicate-`init` form: AND `&& $0.deletedDate == nil` into the predicate. Any code summing a **relationship array** (e.g. `client.timeEntries`) must `.filter { $0.deletedDate == nil }` too. To trash a record set `deletedDate = .now` (never `modelContext.delete`, except for the hard-delete exceptions: TimePreset, Project, and the AddEditClientView eager-insert cancel). See the Recently Deleted section.

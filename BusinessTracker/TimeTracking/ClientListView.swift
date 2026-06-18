@@ -11,10 +11,12 @@ private let incomeSourcePresets = [
 struct ClientsView: View {
     @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
     @Environment(\.modelContext) private var modelContext
+    @Environment(Entitlements.self) private var pro
 
     @State private var showAddClient = false
     @State private var showSettings = false
     @State private var pendingDelete: IndexSet?
+    @State private var paywall: ProFeature?
 
     var body: some View {
         NavigationStack {
@@ -39,7 +41,13 @@ struct ClientsView: View {
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                Button { showAddClient = true } label: {
+                Button {
+                    if pro.canCreateClient(currentCount: clients.count) {
+                        showAddClient = true
+                    } else {
+                        paywall = .unlimitedClients
+                    }
+                } label: {
                     Image(systemName: "plus")
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(.white)
@@ -47,6 +55,7 @@ struct ClientsView: View {
                         .background(.teal, in: Circle())
                         .shadow(color: .teal.opacity(0.35), radius: 10, x: 0, y: 4)
                 }
+                .accessibilityLabel("Add Client")
                 .padding(.trailing, 20)
                 .padding(.bottom, 20)
             }
@@ -54,12 +63,14 @@ struct ClientsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "person.crop.circle")
+                        Image(systemName: "person.fill")
                     }
+                    .accessibilityLabel("Profile & Settings")
                 }
             }
             .sheet(isPresented: $showAddClient) { AddEditClientView() }
             .sheet(isPresented: $showSettings)   { SettingsView() }
+            .proPaywall($paywall)
             .confirmationDialog("Delete Client?", isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }
@@ -108,7 +119,7 @@ private struct ClientCell: View {
 
             Spacer()
 
-            Text(totalEarnings.formatted(.currency(code: "USD")))
+            Text(totalEarnings.asCurrency)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.green)
                 .padding(.horizontal, 8)
@@ -160,11 +171,13 @@ struct ClientAvatar: View {
 struct ClientDetailView: View {
     let client: Client
     @Environment(\.modelContext) private var modelContext
+    @Environment(Entitlements.self) private var pro
 
     @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }) private var timeEntries: [TimeEntry]
     @Query(filter: #Predicate<IncomeEntry> { $0.deletedDate == nil }) private var incomeEntries: [IncomeEntry]
     @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }) private var expenses: [Expense]
     @Query(filter: #Predicate<Invoice> { $0.deletedDate == nil }) private var invoices: [Invoice]
+    @Query(filter: #Predicate<Quote> { $0.deletedDate == nil }) private var quotes: [Quote]
 
     init(client: Client) {
         self.client = client
@@ -185,11 +198,18 @@ struct ClientDetailView: View {
             filter: #Predicate<Invoice> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
             sort: \Invoice.invoiceNumber, order: .reverse
         )
+        _quotes = Query(
+            filter: #Predicate<Quote> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
+            sort: \Quote.quoteNumber, order: .reverse
+        )
     }
 
     @State private var showEditClient = false
     @State private var showLogIncome = false
     @State private var showCreateInvoice = false
+    @State private var showCreateQuote = false
+    @State private var viewingQuote: Quote?
+    @State private var pendingDeleteQuote: ([Quote], IndexSet)?
     @State private var editingIncome: IncomeEntry?
     @State private var editingTimeEntry: TimeEntry?
     @State private var editingExpense: Expense?
@@ -198,6 +218,7 @@ struct ClientDetailView: View {
     @State private var pendingDeleteTime: ([TimeEntry], IndexSet)?
     @State private var pendingDeleteExpense: ([Expense], IndexSet)?
     @State private var pendingDeleteInvoice: ([Invoice], IndexSet)?
+    @State private var paywall: ProFeature?
 
     // MARK: All-time aggregates (header stats)
 
@@ -248,7 +269,7 @@ struct ClientDetailView: View {
 
                     HStack(spacing: 0) {
                         VStack(spacing: 2) {
-                            Text(totalEarnings.formatted(.currency(code: "USD")))
+                            Text(totalEarnings.asCurrency)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.green)
                             Text("Earned").font(.caption2).foregroundStyle(.secondary)
@@ -264,7 +285,7 @@ struct ClientDetailView: View {
                         .frame(maxWidth: .infinity)
                         Divider().frame(height: 28)
                         VStack(spacing: 2) {
-                            Text(totalExpenses.formatted(.currency(code: "USD")))
+                            Text(totalExpenses.asCurrency)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.red)
                             Text("Expenses").font(.caption2).foregroundStyle(.secondary)
@@ -295,6 +316,35 @@ struct ClientDetailView: View {
                 }
             }
 
+            // MARK: Quotes / Estimates section
+            Section {
+                if quotes.isEmpty {
+                    Text("No estimates yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .padding(.vertical, 4)
+                } else {
+                    ForEach(quotes) { quote in
+                        QuoteRow(quote: quote)
+                            .contentShape(Rectangle())
+                            .onTapGesture { viewingQuote = quote }
+                    }
+                    .onDelete { pendingDeleteQuote = (quotes, $0) }
+                }
+            } header: {
+                HStack {
+                    Text("Estimates")
+                    Spacer()
+                    Button {
+                        if pro.isProEffective { showCreateQuote = true } else { paywall = .quotes }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .accessibilityLabel("New Estimate")
+                }
+            }
+
             // MARK: Invoices section
             Section {
                 if invoices.isEmpty {
@@ -314,10 +364,13 @@ struct ClientDetailView: View {
                 HStack {
                     Text("Invoices")
                     Spacer()
-                    Button { showCreateInvoice = true } label: {
+                    Button {
+                        if pro.isProEffective { showCreateInvoice = true } else { paywall = .invoicing }
+                    } label: {
                         Image(systemName: "plus")
                             .font(.caption.weight(.semibold))
                     }
+                    .accessibilityLabel("New Invoice")
                 }
             }
 
@@ -344,6 +397,7 @@ struct ClientDetailView: View {
                         Image(systemName: "plus")
                             .font(.caption.weight(.semibold))
                     }
+                    .accessibilityLabel("Log Income")
                 }
             }
 
@@ -392,6 +446,9 @@ struct ClientDetailView: View {
         .sheet(isPresented: $showEditClient)    { AddEditClientView(existingClient: client) }
         .sheet(isPresented: $showLogIncome)   { LogIncomeForClientView(client: client) }
         .sheet(isPresented: $showCreateInvoice) { CreateInvoiceView(client: client) }
+        .sheet(isPresented: $showCreateQuote)   { CreateQuoteView(client: client) }
+        .sheet(item: $viewingQuote)           { QuoteDetailView(quote: $0) }
+        .proPaywall($paywall)
         .sheet(item: $editingIncome)          { IncomeEditView(entry: $0) }
         .sheet(item: $editingExpense)         { ExpenseEditView(expense: $0) }
         .sheet(item: $editingTimeEntry)       { TimeEntryEditView(entry: $0) }
@@ -444,6 +501,18 @@ struct ClientDetailView: View {
             }
             Button("Cancel", role: .cancel) { pendingDeleteInvoice = nil }
         } message: { Text("The invoice is moved to Recently Deleted. Restore within 30 days to recover it.") }
+        .confirmationDialog("Delete Estimate?", isPresented: Binding(
+            get: { pendingDeleteQuote != nil },
+            set: { if !$0 { pendingDeleteQuote = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let (items, offsets) = pendingDeleteQuote {
+                    for i in offsets { items[i].deletedDate = .now }
+                }
+                pendingDeleteQuote = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteQuote = nil }
+        } message: { Text("The estimate is moved to Recently Deleted. Restore within 30 days to recover it.") }
     }
 }
 
@@ -474,7 +543,7 @@ private struct ClientPLCard: View {
                 Text("Net \(monthLabel)")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(net.formatted(.currency(code: "USD")))
+                Text(net.asCurrency)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(net >= 0 ? .green : .red)
                     .padding(.horizontal, 10)
@@ -495,7 +564,7 @@ private struct ClientPLCard: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text("\(negative ? "−" : "")\(value.formatted(.currency(code: "USD")))")
+            Text("\(negative ? "−" : "")\(value.asCurrency)")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(color)
         }
@@ -515,7 +584,7 @@ private struct ClientTimeEntryRow: View {
                 Text(entry.project?.name ?? "Uncategorized")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(entry.earnings.formatted(.currency(code: "USD")))
+                Text(entry.earnings.asCurrency)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.indigo)
                     .padding(.horizontal, 8)
@@ -653,5 +722,6 @@ struct LogIncomeForClientView: View {
 
 #Preview {
     ClientsView()
+        .environment(Entitlements())
         .modelContainer(for: [Client.self, Project.self, TimeEntry.self, IncomeEntry.self], inMemory: true)
 }

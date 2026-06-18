@@ -31,7 +31,22 @@ final class Invoice: SoftDeletable {
     @Relationship(deleteRule: .cascade, inverse: \InvoiceLineItem.invoice)
     var lineItems: [InvoiceLineItem]? = nil
 
-    var formattedNumber: String { String(format: "INV-%03d", invoiceNumber) }
+    var formattedNumber: String { Invoice.formatted(number: invoiceNumber, issueDate: issueDate) }
+
+    /// Formats a document number using the user's configurable prefix
+    /// (`doc_invoicePrefix`, default "INV-") and optional per-year reset
+    /// (`doc_numberResetYearly`, which inserts the year, e.g. "INV-2026-001").
+    static func formatted(number: Int, issueDate: Date) -> String {
+        let d = UserDefaults.standard
+        let prefix = (d.string(forKey: "doc_invoicePrefix")?.isEmpty == false)
+            ? d.string(forKey: "doc_invoicePrefix")! : "INV-"
+        let padded = String(format: "%03d", number)
+        if d.bool(forKey: "doc_numberResetYearly") {
+            let year = Calendar.current.component(.year, from: issueDate)
+            return "\(prefix)\(year)-\(padded)"
+        }
+        return "\(prefix)\(padded)"
+    }
 
     /// Pre-tax, pre-discount sum of all charges (time entries + manual line items + legacy extra).
     var subtotal: Double {
@@ -45,6 +60,18 @@ final class Invoice: SoftDeletable {
 
     /// Final amount due.
     var total: Double { discountedSubtotal + taxAmount }
+
+    /// Unpaid and past its due date (date-only comparison; due *today* is not overdue).
+    var isOverdue: Bool {
+        !isPaid && deletedDate == nil && dueDate < Calendar.current.startOfDay(for: .now)
+    }
+
+    /// Whole days past the due date (0 if not overdue).
+    var daysOverdue: Int {
+        guard isOverdue else { return 0 }
+        let cal = Calendar.current
+        return cal.dateComponents([.day], from: cal.startOfDay(for: dueDate), to: cal.startOfDay(for: .now)).day ?? 0
+    }
 
     init(
         invoiceNumber: Int,

@@ -32,6 +32,9 @@ final class Client: SoftDeletable {
     @Relationship(deleteRule: .cascade, inverse: \Invoice.client)
     var invoices: [Invoice]? = nil
 
+    @Relationship(deleteRule: .cascade, inverse: \Quote.client)
+    var quotes: [Quote]? = nil
+
     init(name: String) {
         self.name = name
     }

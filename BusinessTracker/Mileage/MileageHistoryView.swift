@@ -41,7 +41,7 @@ struct MileageHistoryView: View {
                                     .foregroundStyle(.secondary)
                                 Text("·")
                                     .foregroundStyle(.tertiary)
-                                Text(reimbursement, format: .currency(code: "USD"))
+                                Text(reimbursement, format: AppCurrency.style)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
