@@ -63,7 +63,7 @@ struct ClientsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "person.fill")
+                        ProfileToolbarLabel()
                     }
                     .accessibilityLabel("Profile & Settings")
                 }

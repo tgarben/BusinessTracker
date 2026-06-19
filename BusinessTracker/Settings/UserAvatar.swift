@@ -41,6 +41,25 @@ struct UserAvatar: View {
     }
 }
 
+/// The label for the top-left profile/Settings toolbar button on every tab:
+/// the user's avatar when they've set one, otherwise the `person.fill` glyph.
+struct ProfileToolbarLabel: View {
+    @AppStorage("user_avatar") private var avatarData: Data = Data()
+
+    var body: some View {
+        if !avatarData.isEmpty, let image = UIImage(data: avatarData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(.quaternary, lineWidth: 0.5))
+        } else {
+            Image(systemName: "person.fill")
+        }
+    }
+}
+
 /// Helpers for preparing a picked photo for storage as the user avatar.
 ///
 /// Avatars sync via `NSUbiquitousKeyValueStore` (see `CloudKeyValueSync`),

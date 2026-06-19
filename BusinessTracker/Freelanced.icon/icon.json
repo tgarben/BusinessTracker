@@ -1,12 +1,14 @@
 {
-  "fill" : "automatic",
+  "fill" : {
+    "automatic-gradient" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+  },
   "groups" : [
     {
       "blur-material" : 0.5,
       "layers" : [
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -48,7 +50,7 @@
       },
       "specular" : true,
       "translucency" : {
-        "enabled" : false,
+        "enabled" : true,
         "value" : 0.1
       }
     },
@@ -57,7 +59,7 @@
       "layers" : [
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -82,7 +84,7 @@
         },
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -122,7 +124,7 @@
       "layers" : [
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -135,7 +137,7 @@
         },
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -148,7 +150,7 @@
         },
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -161,7 +163,7 @@
         },
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -174,7 +176,7 @@
         },
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -187,7 +189,7 @@
         },
         {
           "fill" : {
-            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.84706"
           },
           "hidden-specializations" : [
             {
@@ -217,7 +219,7 @@
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.75
+        "value" : 0.5
       }
     }
   ],

@@ -68,7 +68,7 @@ struct MileageView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showSettings = true } label: {
-                        Image(systemName: "person.fill")
+                        ProfileToolbarLabel()
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {

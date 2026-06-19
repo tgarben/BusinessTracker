@@ -81,6 +81,14 @@ struct SettingsView: View {
 
     private let paymentTermsOptions = ["Due Upon Receipt", "Net 15", "Net 30", "Net 45", "Net 60"]
 
+    /// "1.0 (42)" — short version + build number, so TestFlight builds are distinguishable.
+    private var appVersionString: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(version) (\(build))"
+    }
+
     /// Live example of the invoice number format for the numbering section footer.
     private var numberSample: String {
         let year = Calendar.current.component(.year, from: .now)
@@ -108,7 +116,6 @@ struct SettingsView: View {
 
     @State private var exportItem: ExportItem?
     @State private var showTimePresets = false
-    @State private var avatarItem: PhotosPickerItem?
     @State private var logoItem: PhotosPickerItem?
     @State private var showPhotoMenu = false
     @State private var showCamera = false
@@ -812,7 +819,7 @@ struct SettingsView: View {
                         SettingsIcon(symbol: "info.circle.fill", color: .gray)
                         Text("Version")
                         Spacer()
-                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
+                        Text(appVersionString)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -879,34 +886,31 @@ struct SettingsView: View {
                 Button("Take Photo") { showCamera = true }
                 Button("Choose from Library") { showLibrary = true }
                 if !avatarData.isEmpty {
-                    Button("Remove Photo", role: .destructive) {
-                        avatarData = Data()
-                        avatarItem = nil
-                    }
+                    Button("Remove Photo", role: .destructive) { avatarData = Data() }
                 }
                 Button("Cancel", role: .cancel) {}
             }
-            .photosPicker(isPresented: $showLibrary, selection: $avatarItem, matching: .images)
+            // Both paths use UIImagePickerController with editing on, so the user gets
+            // the built-in square crop ("Move and Scale") before it's saved.
             .fullScreenCover(isPresented: $showCamera) {
-                CameraView(
-                    onCapture: { image in
-                        if let data = image.jpegData(compressionQuality: 0.9).flatMap({ UserAvatarImage.processed($0) }) {
-                            avatarData = data
-                        }
-                        showCamera = false
-                    },
-                    onCancel: { showCamera = false }
-                )
-                .ignoresSafeArea()
+                CameraView(sourceType: .camera, allowsEditing: true,
+                           onCapture: { setAvatar(from: $0); showCamera = false },
+                           onCancel: { showCamera = false })
+                    .ignoresSafeArea()
             }
-            .onChange(of: avatarItem) { _, item in
-                Task {
-                    if let raw = try? await item?.loadTransferable(type: Data.self),
-                       let processed = UserAvatarImage.processed(raw) {
-                        avatarData = processed
-                    }
-                }
+            .fullScreenCover(isPresented: $showLibrary) {
+                CameraView(sourceType: .photoLibrary, allowsEditing: true,
+                           onCapture: { setAvatar(from: $0); showLibrary = false },
+                           onCancel: { showLibrary = false })
+                    .ignoresSafeArea()
             }
+        }
+    }
+
+    /// Downscale a picked/cropped image and store it as the user avatar.
+    private func setAvatar(from image: UIImage) {
+        if let data = image.jpegData(compressionQuality: 0.9).flatMap({ UserAvatarImage.processed($0) }) {
+            avatarData = data
         }
     }
 
