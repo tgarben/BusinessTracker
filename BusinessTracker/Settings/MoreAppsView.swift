@@ -51,6 +51,7 @@ enum GarbenApps {
             name: "Sipfolio",
             tagline: "Track and rate every drink you try",
             iconSymbol: "cup.and.saucer",
+            iconAsset: "sipfolioLogo",
             tint: .green,
             appStoreURL: nil,                                   // TODO: set once it ships on the App Store
             testFlightURL: URL(string: "https://testflight.apple.com/join/QYM455vN")

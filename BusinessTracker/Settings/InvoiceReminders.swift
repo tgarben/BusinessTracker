@@ -9,7 +9,6 @@ import UserNotifications
 enum InvoiceReminders {
     static let enabledKey = "invoice_remindersEnabled"
     private static let idPrefix = "invoice-due-"
-    private static let fireHour = 9         // 9am local
     private static let leadDays = [1, 0]    // the day before, and the due date itself
 
     static func requestAuthorization() async -> Bool {
@@ -45,7 +44,8 @@ enum InvoiceReminders {
             for lead in leadDays {
                 guard let fireDay = cal.date(byAdding: .day, value: -lead, to: dueDay) else { continue }
                 var comps = cal.dateComponents([.year, .month, .day], from: fireDay)
-                comps.hour = fireHour
+                comps.hour = ReminderTime.hour
+                comps.minute = ReminderTime.minute
                 guard let fireDate = cal.date(from: comps), fireDate > now else { continue }
 
                 let content = UNMutableNotificationContent()

@@ -8,7 +8,20 @@ struct BusinessTrackerApp: App {
     @State private var entitlements = Entitlements()
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
+    /// Whether the SwiftData store came up CloudKit-backed (vs. the local-only
+    /// fallback). Read by the Settings → iCloud Sync status so a silent fallback
+    /// is visible to the user.
+    static private(set) var cloudKitEnabled = false
+
     private static let sharedModelContainer: ModelContainer = {
+        // ⚠️ DATA-SAFETY GUARDRAIL — see "Schema changes & data safety" in CLAUDE.md.
+        // SAFE: add a new @Model here, or add a new property *with a default on the
+        // declaration* (`var x: T = default`; to-many = `[T]? = nil`). NOT SAFE without
+        // a SchemaMigrationPlan: renaming, retyping, removing a property, or dropping a
+        // default — these can fail migration and lose data. After any model change, run
+        // on a device + redeploy CloudKit Dev→Production, and test the upgrade path
+        // (old build with data → new build) before shipping.
+        // Do NOT add a `catch` that deletes/recreates the store — it would silently wipe data.
         let schema = Schema([
             Expense.self,
             Client.self,
@@ -29,9 +42,12 @@ struct BusinessTrackerApp: App {
                 schema: schema,
                 cloudKitDatabase: .private("iCloud.com.garbenTechnologies.BusinessTracker")
             )
-            return try ModelContainer(for: schema, configurations: [config])
+            let container = try ModelContainer(for: schema, configurations: [config])
+            cloudKitEnabled = true
+            return container
         } catch {
             print("⚠️ CloudKit ModelContainer failed, falling back to local store: \(error)")
+            cloudKitEnabled = false
             return try! ModelContainer(for: schema, configurations: [
                 ModelConfiguration(schema: schema, cloudKitDatabase: .none)
             ])

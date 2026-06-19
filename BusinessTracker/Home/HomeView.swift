@@ -181,8 +181,8 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Active timer — pinned, not reorderable
-                if timerState.isRunning {
+                // Active timer — pinned, not reorderable (shows while paused too)
+                if timerState.isActive {
                     ActiveTimerCard()
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
@@ -202,7 +202,7 @@ struct HomeView: View {
                 ForEach(sectionOrder, id: \.self) { section in
                     if section == .quickActions && enabledQuickActions.isEmpty { EmptyView() } else {
                     HomeSectionCard(section: section,
-                                    timerRunning: timerState.isRunning,
+                                    timerRunning: timerState.isActive,
                                     enabledQuickActions: enabledQuickActions,
                                     todayHours: todayHours,
                                     todayMiles: todayMiles,

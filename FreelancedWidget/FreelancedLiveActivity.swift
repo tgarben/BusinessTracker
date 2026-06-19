@@ -7,6 +7,8 @@ import SwiftUI
 struct TimerActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         var startDate: Date
+        /// When set, the Live Activity timer freezes here (paused). Nil = running.
+        var pauseTime: Date? = nil
     }
     var clientName: String
     var projectName: String
@@ -48,21 +50,22 @@ private struct TimerAppBadge: View {
 // MARK: - Live "tracking" pill
 
 private struct TrackingLabel: View {
+    var paused: Bool = false
     var body: some View {
         HStack(spacing: 5) {
-            Circle().fill(.red).frame(width: 6, height: 6)
-            Text("TRACKING TIME")
+            Circle().fill(paused ? Color.orange : Color.red).frame(width: 6, height: 6)
+            Text(paused ? "PAUSED" : "TRACKING TIME")
                 .font(.system(size: 10, weight: .heavy))
                 .tracking(0.6)
-                .foregroundStyle(brandIndigo)
+                .foregroundStyle(paused ? Color.orange : brandIndigo)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
     }
 }
 
-private func liveTimer(from start: Date, size: CGFloat) -> some View {
-    Text(timerInterval: start...Date.distantFuture, countsDown: false)
+private func liveTimer(from start: Date, pauseTime: Date?, size: CGFloat) -> some View {
+    Text(timerInterval: start...Date.distantFuture, pauseTime: pauseTime, countsDown: false)
         .monospacedDigit()
         .font(.system(size: size, weight: .bold, design: .rounded))
         .foregroundStyle(brandIndigo)
@@ -89,7 +92,7 @@ struct FreelancedLiveActivity: Widget {
                         TimerAppBadge(size: 42, corner: 11, iconSize: 21)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            TrackingLabel()
+                            TrackingLabel(paused: context.state.pauseTime != nil)
                             Text(title(context))
                                 .font(.headline)
                                 .lineLimit(1)
@@ -104,7 +107,7 @@ struct FreelancedLiveActivity: Widget {
                         Spacer(minLength: 8)
 
                         VStack(alignment: .trailing, spacing: 2) {
-                            liveTimer(from: context.state.startDate, size: 26)
+                            liveTimer(from: context.state.startDate, pauseTime: context.state.pauseTime, size: 26)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .multilineTextAlignment(.trailing)
@@ -121,7 +124,7 @@ struct FreelancedLiveActivity: Widget {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(brandIndigo)
             } compactTrailing: {
-                Text(timerInterval: context.state.startDate...Date.distantFuture, countsDown: false)
+                Text(timerInterval: context.state.startDate...Date.distantFuture, pauseTime: context.state.pauseTime, countsDown: false)
                     .monospacedDigit()
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(brandIndigo)
@@ -156,7 +159,7 @@ struct TimerLockScreenView: View {
             TimerAppBadge()
 
             VStack(alignment: .leading, spacing: 3) {
-                TrackingLabel()
+                TrackingLabel(paused: context.state.pauseTime != nil)
                 Text(title)
                     .font(.headline)
                     .lineLimit(1)
@@ -172,7 +175,7 @@ struct TimerLockScreenView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                liveTimer(from: context.state.startDate, size: 28)
+                liveTimer(from: context.state.startDate, pauseTime: context.state.pauseTime, size: 28)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .multilineTextAlignment(.trailing)

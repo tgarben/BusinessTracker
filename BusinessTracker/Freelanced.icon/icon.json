@@ -1,0 +1,230 @@
+{
+  "fill" : "automatic",
+  "groups" : [
+    {
+      "blur-material" : 0.5,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer6.png",
+          "name" : "layer6"
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Group",
+      "position-specializations" : [
+        {
+          "idiom" : "square",
+          "value" : {
+            "scale" : 0.96,
+            "translation-in-points" : [
+              -10,
+              4
+            ]
+          }
+        },
+        {
+          "idiom" : "watchOS",
+          "value" : {
+            "scale" : 0.87,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.1
+      }
+    },
+    {
+      "blur-material" : 0.5,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer7.png",
+          "name" : "layer7",
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 0.96,
+                "translation-in-points" : [
+                  -10,
+                  4
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer8.png",
+          "name" : "layer8",
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 0.96,
+                "translation-in-points" : [
+                  -10,
+                  4
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "lighting" : "individual",
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : null,
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer1.png",
+          "name" : "layer1"
+        },
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer2.png",
+          "name" : "layer2"
+        },
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer3.png",
+          "name" : "layer3"
+        },
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer5.png",
+          "name" : "layer5"
+        },
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer4.png",
+          "name" : "layer4"
+        },
+        {
+          "fill" : {
+            "solid" : "display-p3:0.18267,0.43088,0.70977,1.00000"
+          },
+          "hidden-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : false
+            }
+          ],
+          "image-name" : "layer9.png",
+          "name" : "layer9"
+        }
+      ],
+      "position-specializations" : [
+        {
+          "idiom" : "square",
+          "value" : {
+            "scale" : 0.96,
+            "translation-in-points" : [
+              -10,
+              4
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.75
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

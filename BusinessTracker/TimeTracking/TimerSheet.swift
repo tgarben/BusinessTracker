@@ -29,7 +29,7 @@ struct TimerSheet: View {
     /// picker appears (a client with projects, e.g. filled in by a preset), so we
     /// open at `.large` in that case. (iPhone only — iPad has no detents.)
     private var prefersLargeDetent: Bool {
-        !timerState.isRunning && !availableProjects.isEmpty
+        !timerState.isActive && !availableProjects.isEmpty
     }
 
     private func syncDetent() {
@@ -47,13 +47,13 @@ struct TimerSheet: View {
                 } else {
                     // Clock
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        Text(timerState.isRunning ? timerState.elapsed.timerFormatted : "0:00:00")
+                        Text(timerState.isActive ? timerState.elapsed.timerFormatted : "0:00:00")
                             .font(.system(size: 64, weight: .thin, design: .monospaced))
-                            .foregroundStyle(timerState.isRunning ? .red : .primary)
+                            .foregroundStyle(timerState.isRunning ? .red : (timerState.isPaused ? .orange : .primary))
                             .contentTransition(.numericText())
                     }
 
-                    if !timerState.isRunning {
+                    if !timerState.isActive {
                         // Pickers + optional preset shortcuts
                         VStack(spacing: 12) {
                             Picker("Client", selection: $selectedClient) {
@@ -143,25 +143,40 @@ struct TimerSheet: View {
                         }
                     }
 
-                    // Start / Stop button
-                    Button {
-                        if timerState.isRunning {
-                            stopAndSave()
-                        } else {
-                            timerState.start(client: selectedClient, project: selectedProject)
+                    // Controls — Start when idle; Pause/Resume + Stop while a session is active
+                    if timerState.isActive {
+                        HStack(spacing: 14) {
+                            Button {
+                                if timerState.isRunning { timerState.pause() } else { timerState.resume() }
+                            } label: {
+                                Label(
+                                    timerState.isRunning ? "Pause" : "Resume",
+                                    systemImage: timerState.isRunning ? "pause.circle.fill" : "play.circle.fill"
+                                )
+                                .font(.title3.bold())
+                                .foregroundStyle(.white)
+                                .frame(width: 145, height: 56)
+                                .background(timerState.isRunning ? Color.orange : Color.green,
+                                            in: RoundedRectangle(cornerRadius: 16))
+                            }
+                            Button { stopAndSave() } label: {
+                                Label("Stop", systemImage: "stop.circle.fill")
+                                    .font(.title3.bold())
+                                    .foregroundStyle(.white)
+                                    .frame(width: 145, height: 56)
+                                    .background(Color.red, in: RoundedRectangle(cornerRadius: 16))
+                            }
                         }
-                    } label: {
-                        Label(
-                            timerState.isRunning ? "Stop" : "Start",
-                            systemImage: timerState.isRunning ? "stop.circle.fill" : "play.circle.fill"
-                        )
-                        .font(.title2.bold())
-                        .foregroundStyle(.white)
-                        .frame(width: 180, height: 56)
-                        .background(
-                            timerState.isRunning ? Color.red : Color.green,
-                            in: RoundedRectangle(cornerRadius: 16)
-                        )
+                    } else {
+                        Button {
+                            timerState.start(client: selectedClient, project: selectedProject)
+                        } label: {
+                            Label("Start", systemImage: "play.circle.fill")
+                                .font(.title2.bold())
+                                .foregroundStyle(.white)
+                                .frame(width: 180, height: 56)
+                                .background(Color.green, in: RoundedRectangle(cornerRadius: 16))
+                        }
                     }
                 }
 
@@ -188,7 +203,7 @@ struct TimerSheet: View {
         .onAppear { syncDetent() }
         .onChange(of: selectedClient) { _, _ in syncDetent() }
         .onChange(of: selectedProject) { _, _ in syncDetent() }
-        .onChange(of: timerState.isRunning) { _, _ in syncDetent() }
+        .onChange(of: timerState.isActive) { _, _ in syncDetent() }
     }
 
     // MARK: - Saved confirmation view

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import UniformTypeIdentifiers
 
 /// First + last name for invoices and exports (read from UserDefaults so non-View code can use it).
 /// The Home greeting deliberately uses only the first name (`user_name`).
@@ -40,6 +41,8 @@ struct SettingsView: View {
     @Environment(Entitlements.self) private var pro
     @Environment(\.modelContext) private var modelContext
     @AppStorage("invoice_remindersEnabled") private var invoiceRemindersEnabled: Bool = false
+    @AppStorage("notify_hour") private var notifyHour: Int = 9
+    @AppStorage("notify_minute") private var notifyMinute: Int = 0
     @AppStorage("user_name") private var userName: String = ""
     @AppStorage("user_lastName") private var userLastName: String = ""
     @AppStorage("user_primaryUse") private var primaryUse: String = "Mixed"
@@ -112,6 +115,9 @@ struct SettingsView: View {
     @State private var showLibrary = false
     @State private var paywall: ProFeature?
     @State private var showUpgrade = false
+    @State private var showImporter = false
+    @State private var pendingImport: URL?
+    @State private var backupResult: String?
     @FocusState private var fieldFocused: Bool
 
     /// The upgrade banner is the real free → Pro CTA once monetization is live,
@@ -154,6 +160,38 @@ struct SettingsView: View {
                         let formatted = formatPhoneNumber(newValue)
                         if formatted != newValue { text.wrappedValue = formatted }
                     }
+            }
+        }
+    }
+
+    /// The time-of-day all local reminders fire, as a `Date` bound to a `DatePicker`.
+    /// Rescheduling on change keeps the pending notifications in sync.
+    private var reminderTime: Binding<Date> {
+        Binding(
+            get: { Calendar.current.date(bySettingHour: notifyHour, minute: notifyMinute, second: 0, of: .now) ?? .now },
+            set: { newDate in
+                let c = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                notifyHour = c.hour ?? 9
+                notifyMinute = c.minute ?? 0
+                rescheduleAllReminders()
+            }
+        )
+    }
+
+    private func rescheduleAllReminders() {
+        Task {
+            await TaxReminders.reschedule()
+            await InvoiceReminders.reschedule(container: modelContext.container)
+        }
+    }
+
+    /// A "Reminder Time" `DatePicker` row, shown in each reminders section
+    /// (both edit the same global setting).
+    @ViewBuilder private var reminderTimeRow: some View {
+        DatePicker(selection: reminderTime, displayedComponents: .hourAndMinute) {
+            HStack(spacing: 10) {
+                SettingsIcon(symbol: "clock.fill", color: .orange)
+                Text("Reminder Time")
             }
         }
     }
@@ -316,10 +354,11 @@ struct SettingsView: View {
                 .onChange(of: invoiceRemindersEnabled) { _, enabled in
                     Task { await InvoiceReminders.handleToggle(enabled: enabled, container: modelContext.container) }
                 }
+                reminderTimeRow
             } header: {
                 Text("Reminders")
             } footer: {
-                Text("A local notification the day before and the day an unpaid invoice is due. Overdue invoices also appear on your Home screen.")
+                Text("A local notification the day before and the day an unpaid invoice is due. Overdue invoices also appear on your Home screen. Reminder Time governs all of the app's reminders (invoice and tax deadlines).")
             }
         }
         .listStyle(.insetGrouped)
@@ -434,6 +473,7 @@ struct SettingsView: View {
                 .onChange(of: taxRemindersEnabled) { _, enabled in
                     Task { await TaxReminders.handleToggle(enabled: enabled) }
                 }
+                reminderTimeRow
 
                 ForEach(quarterlyDueDates, id: \.date) { payment in
                     HStack(spacing: 10) {
@@ -672,6 +712,27 @@ struct SettingsView: View {
                     Text("Export as CSV — all data or a single category, limited to the selected date range.")
                 }
 
+                // MARK: Backup & Sync — iCloud status + manual full backup/restore
+                Section {
+                    CloudSyncRow()
+                    Button { exportBackup() } label: {
+                        HStack(spacing: 10) {
+                            SettingsIcon(symbol: "arrow.up.doc.fill", color: .blue)
+                            Text("Export Backup (.json)").foregroundStyle(.primary)
+                        }
+                    }
+                    Button { showImporter = true } label: {
+                        HStack(spacing: 10) {
+                            SettingsIcon(symbol: "arrow.down.doc.fill", color: .indigo)
+                            Text("Import from Backup…").foregroundStyle(.primary)
+                        }
+                    }
+                } header: {
+                    Text("Backup & Sync")
+                } footer: {
+                    Text("Your data is saved on this device and backed up to iCloud when you're signed in. Export a complete copy (records + settings) to Files for safekeeping, or import one to restore on a new device — best on a fresh install, as importing over existing data can create duplicates.")
+                }
+
                 // MARK: Data Management
                 Section {
                     NavigationLink {
@@ -791,6 +852,29 @@ struct SettingsView: View {
             }
             .proPaywall($paywall)
             .sheet(isPresented: $showUpgrade) { PaywallView(context: nil) }
+            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+                switch result {
+                case .success(let url): pendingImport = url
+                case .failure(let error): backupResult = "Couldn't open the file: \(error.localizedDescription)"
+                }
+            }
+            .confirmationDialog("Import Backup?", isPresented: Binding(
+                get: { pendingImport != nil },
+                set: { if !$0 { pendingImport = nil } }
+            ), titleVisibility: .visible) {
+                Button("Import") { performImport() }
+                Button("Cancel", role: .cancel) { pendingImport = nil }
+            } message: {
+                Text("This adds all records from the backup to your current data. Best used on a fresh install — importing over existing data may create duplicates.")
+            }
+            .alert("Backup & Restore", isPresented: Binding(
+                get: { backupResult != nil },
+                set: { if !$0 { backupResult = nil } }
+            )) {
+                Button("OK") { backupResult = nil }
+            } message: {
+                Text(backupResult ?? "")
+            }
             .confirmationDialog("Profile Photo", isPresented: $showPhotoMenu, titleVisibility: .visible) {
                 Button("Take Photo") { showCamera = true }
                 Button("Choose from Library") { showLibrary = true }
@@ -918,6 +1002,34 @@ struct SettingsView: View {
         let start = b.start.map { fmt.string(from: $0) } ?? "—"
         let end = b.end.map { fmt.string(from: $0) } ?? "—"
         return "\(start) to \(end)"
+    }
+
+    // MARK: - Full backup / restore
+
+    private func exportBackup() {
+        do {
+            let data = try DataBackup.export(context: modelContext)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Freelanced_Backup_\(csvDateFormatter.string(from: .now)).json")
+            try data.write(to: url)
+            exportItem = ExportItem(csv: url)
+        } catch {
+            backupResult = "Couldn't create the backup: \(error.localizedDescription)"
+        }
+    }
+
+    private func performImport() {
+        guard let url = pendingImport else { return }
+        pendingImport = nil
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let data = try Data(contentsOf: url)
+            let count = try DataBackup.importBackup(data, into: modelContext)
+            backupResult = "Imported \(count) record\(count == 1 ? "" : "s") from your backup."
+        } catch {
+            backupResult = "Import failed. Make sure you selected a valid Freelanced backup file.\n\n\(error.localizedDescription)"
+        }
     }
 
     private func exportButton(_ title: String, icon: String, color: Color, scope: ExportScope) -> some View {

@@ -33,8 +33,8 @@ struct TimeTrackingView: View {
                     }
                 }
 
-                // Active timer card (only when running)
-                if timerState.isRunning {
+                // Active timer card (running or paused)
+                if timerState.isActive {
                     Section {
                         ActiveTimerCard()
                             .listRowInsets(EdgeInsets())
@@ -107,7 +107,7 @@ struct TimeTrackingView: View {
                 TimeHistoryView()
             }
             .overlay(alignment: .bottomTrailing) {
-                if !timerState.isRunning {
+                if !timerState.isActive {
                     Button { showTimer = true } label: {
                         Image(systemName: "play.fill")
                             .font(.title2.weight(.semibold))
@@ -121,7 +121,7 @@ struct TimeTrackingView: View {
                     .transition(.scale(scale: 0.8).combined(with: .opacity))
                 }
             }
-            .animation(.spring(duration: 0.3), value: timerState.isRunning)
+            .animation(.spring(duration: 0.3), value: timerState.isActive)
             .confirmationDialog("Delete Time Entry?", isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }
@@ -197,13 +197,16 @@ private struct WeekSummaryCard: View {
 struct ActiveTimerCard: View {
     @Environment(TimerState.self) private var timerState
 
+    private var accent: Color { timerState.isPaused ? .orange : .red }
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
-            HStack {
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Label("Timer Running", systemImage: "record.circle")
+                    Label(timerState.isPaused ? "Paused" : "Timer Running",
+                          systemImage: timerState.isPaused ? "pause.circle" : "record.circle")
                         .font(.caption.bold())
-                        .foregroundStyle(.red)
+                        .foregroundStyle(accent)
                         .padding(.vertical, 4)
                     if let client = timerState.client {
                         Text(client.name)
@@ -218,13 +221,19 @@ struct ActiveTimerCard: View {
                 Spacer()
                 Text(timerState.elapsed.timerFormatted)
                     .font(.title3.monospacedDigit().bold())
-                    .foregroundStyle(.red)
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(accent)
+                // Inline pause / resume (the card itself stays tappable to open the sheet)
+                Button {
+                    if timerState.isRunning { timerState.pause() } else { timerState.resume() }
+                } label: {
+                    Image(systemName: timerState.isRunning ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(timerState.isRunning ? .orange : .green)
+                }
+                .buttonStyle(.plain)
             }
             .padding()
-            .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
         }

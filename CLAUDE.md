@@ -69,11 +69,41 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **`MileagePreset`** / **`ExpensePreset`** — standalone saved templates (no relationships). MileagePreset: `name`, `startLocation`, `endLocation`, `purpose`, `notes`, `sortOrder`. ExpensePreset: `name`, `amount: Double?` (nil = variable), `category`, `notes`, `sortOrder`. Registered in the app Schema. Managed from Settings → Presets & Quick-Fill.
 - **`Expense`** — `date`, `amount`, `category`, `notes`, `receiptImageData?` (legacy — kept for migration), `receiptImagesData: [Data]` (current multi-image storage), `client?` (optional link). Categories defined in `Expense.categories`. Helper statics: `categoryIcon(_:)`, `categoryColor(_:)`
 - **`IncomeEntry`** — `date`, `source`, `amount`, `notes`, `client?`. Client is required in the UI (logged from ClientDetailView) but optional at the model level for migration safety.
-- **`TimerState`** — `@Observable` class (not SwiftData). Persists active timer start date to App Group `UserDefaults` so timer survives backgrounding and is readable by the widget extension. Starts/ends `Activity<TimerActivityAttributes>` for the Live Activity. `syncFromSharedStore()` method syncs from the App Group store on foreground — call this to pick up timers written by widget intents. Also holds `pendingWidgetAction: WidgetAction?` for routing widget deep links to the correct sheet.
+- **`TimerState`** — `@Observable` class (not SwiftData). **Supports pause/resume.** State = `runningSince: Date?` (current running segment, nil when paused) + `accumulated: TimeInterval` (banked seconds) + `isPaused: Bool`. Derived: `isActive` (session exists, running **or** paused — use this for "is there a timer" UI branches), `isRunning` (counting now), `elapsed` (= accumulated + now−runningSince). Methods: `start`/`pause`/`resume`/`stop`. Persisted to App Group `UserDefaults` (keys `timerRunningSince`/`timerAccumulated`/`timerPaused`; migrates the legacy `timerStartDate`) so a paused or running timer survives relaunch. Mirrors state into `Activity<TimerActivityAttributes>` — the Live Activity timer **freezes via `pauseTime`** while paused (start/pause/resume call `activity.update`). `syncFromSharedStore()` (foreground) honours an external stop. Also holds `pendingWidgetAction: WidgetAction?` for routing widget deep links.
 - **`WidgetAction`** — enum in `TimerState.swift`: `.startTimer`, `.logTime`, `.logTrip`, `.addExpense`, `.createInvoice`. Set by `BusinessTrackerApp.handleWidgetDeepLink(_:)`, consumed by `ContentView`.
-- **`TimerActivityAttributes`** — `ActivityAttributes` struct in `BusinessTracker/Models/TimerActivityAttributes.swift`. `ContentState` holds `startDate: Date`. Also duplicated (identical) in `FreelancedWidget/FreelancedLiveActivity.swift` — the two targets are separate Swift modules so they cannot share the type directly. **Keep both in sync.**
+- **`TimerActivityAttributes`** — `ActivityAttributes` struct in `BusinessTracker/Models/TimerActivityAttributes.swift`. `ContentState` holds `startDate: Date` (a *synthetic effective* start, so `now − startDate == elapsed`) + `pauseTime: Date?` (set while paused — the widget's `Text(timerInterval:pauseTime:)` freezes there). Also duplicated (identical) in `FreelancedWidget/FreelancedLiveActivity.swift` — the two targets are separate Swift modules so they cannot share the type directly. **Keep both in sync.**
 
 ---
+
+## ⚠️ Schema changes & data safety — READ BEFORE editing any `@Model`
+
+**App updates do NOT delete data by themselves** — iOS preserves the local store across updates; only the code is replaced. Data is only ever at risk when a **schema change can't be migrated**. There is currently **NO `SchemaMigrationPlan`** — the app relies entirely on SwiftData's automatic *lightweight* migration, which only works for additive changes. Follow these guardrails so an update never loses a user's data.
+
+### ✅ Always safe (automatic lightweight migration)
+- **Adding a new `@Model`** — register it in the `Schema` array in `BusinessTrackerApp`, run on a device, then redeploy CloudKit Dev → Production.
+- **Adding a new property — ONLY with a default on the declaration:** `var foo: T = <default>`; to-many relationships must be `[T]? = nil`. **No default ⇒ the store silently fails to open** (this is the #1 rule, also under CloudKit model rules below).
+
+### 🛑 NOT safe without a migration plan (can fail to migrate → crash / data loss)
+- Renaming a model or a property
+- Changing a property's type (`String`↔`Int`, `Double`↔`Decimal`, etc.)
+- Removing a property that holds data
+- Making an optional property non-optional, or removing its default
+- Changing a relationship's cardinality, inverse, or delete rule
+
+For ANY of the above you **must** add a `SchemaMigrationPlan` (`VersionedSchema`s + a migration stage). Don't ship the change without one.
+
+### Pre-ship checklist for ANY `@Model` change
+1. Every new stored property has a **default on the declaration**? (to-many = `[T]? = nil`, money = `Double` not `Decimal`)
+2. Change is **additive only**? If not → write a `SchemaMigrationPlan` + migration stage first.
+3. **Test the real upgrade path on a device:** install the *current* App Store/TestFlight build, enter real data, then upgrade to the new build and confirm nothing is lost. ⭐ Single most important safeguard.
+4. Run the new build on a device so new types register in the **Development** CloudKit schema, then **Deploy Schema Changes… Dev → Production** before shipping. (CloudKit Production is **additive-only** — you can never remove/rename there.)
+5. Before a major release, suggest users **Export a Backup** (Settings → Backup & Sync); they can re-import if anything ever goes wrong.
+
+### Safety nets already in place (defense in depth)
+- **iCloud mirror** (CloudKit private DB) — data isn't only on one device.
+- **Full JSON Backup/Restore** (`DataBackup`, Settings → Backup & Sync) — a complete manual copy.
+- **30-day soft-delete trash** — accidental deletions are recoverable.
+- **No "delete & recreate store on failure" path** in the container init — a failed migration crashes / fails to open (recoverable by fixing the build), rather than silently wiping the store. Keep it that way; never add a `catch` that deletes the store.
 
 ## iCloud Sync — current state & notes
 
@@ -84,6 +114,7 @@ Working directly off `main` — no feature branches at the moment (Tyler's home 
 - **Xcode capability:** iCloud → CloudKit must be enabled in Signing & Capabilities with container `iCloud.com.garbenTechnologies.BusinessTracker`
 - **Known limitation:** CloudKit does not support `Decimal` natively — if sync issues arise, monetary fields may need to be stored as `Double` (cents as Int) with a migration plan
 - Sync only works on a real device signed into iCloud; simulator always uses the local fallback
+- **Visible status:** `BusinessTrackerApp.cloudKitEnabled` (set during container init — true = CloudKit store, false = local-only fallback) + a CloudKit `accountStatus()` check drive **`CloudSyncRow`** (`Settings/CloudSyncStatusView.swift`), a read-only "iCloud Sync" row in the Settings **"Backup & Sync"** section (alongside the manual export/import). States: On (green) / Paused — signed out (orange) / This Device — local-only fallback (orange) / Checking. **Data is always written locally first; iCloud is a background mirror** — local is never the only-missing copy.
 
 ### Settings / business-info sync (NSUbiquitousKeyValueStore)
 
@@ -154,6 +185,7 @@ When a returning user installs on a new device, onboarding pre-fills from the iC
 - **Timer flow:**
   - Pick client + project (or leave blank = uncategorized) before starting
   - Preset chips shown as horizontal scroll for quick pre-start selection
+  - **Pause / Resume** mid-session (Jack's request) — `TimerSheet` shows Pause/Resume + Stop while active; `ActiveTimerCard` has an inline pause/resume button and turns orange while paused. Banks elapsed via `accumulated`; the Live Activity freezes. No need to start a new timer after a break.
   - Stop → auto-saves immediately with known client/project/rate/notes template
   - Animated ✓ confirmation shown ~1.8s then sheet auto-dismisses
   - No post-stop form unless user taps into the saved entry to edit
@@ -284,6 +316,7 @@ The pre-sale counterpart to Invoicing (Jack's idea). Mirrors invoicing infrastru
 - **Fuel:** MPG + gas price (shared with Reports fuel analysis card)
 - **Tax Information:** business structure picker, SE tax rate, income bracket rate
 - **Quarterly Tax Due Dates:** all four IRS estimated payment deadlines shown with period labels; next upcoming date highlighted in orange with days-until countdown
+- **Backup & Restore** (`Settings/DataBackup.swift`, in the Settings **"Backup & Sync"** section below the `CloudSyncRow`): **Export Backup (.json)** writes a complete copy of every record (all 13 models, incl. soft-deleted) + the synced `@AppStorage` settings to a `Freelanced_Backup_<date>.json` file shared via the share sheet. **Import from Backup…** (`.fileImporter` → confirmation) re-inserts it. Relationships survive via **export-scoped UUIDs** (`persistentModelID` isn't portable). Import is **additive** (inserts alongside existing data — meant for a fresh install; warns about duplicates). **Not Pro-gated** — it's a data-integrity safety net. `SettingValue` enum carries the typed settings (string/double/bool/data).
 - **Data Export:** scoped CSV exports — **Export All Data** plus per-category **Time Entries / Mileage / Expenses** buttons, each limited to a selected **date range** (`ExportRange`: All Time / This Month / This Quarter / This Year / Custom with from/to `DatePicker`s). `exportBounds`/`inExportRange(_:)` filter every row builder by `date`; the range is written into the CSV header (`Range,…`) and the filename (`Freelanced_<Scope>_<Range>_<date>.csv`). `ExportScope` + `buildCSV(_:)` compose from `timeRows()`/`mileageRows()`/`expenseRows()` (each `[String]`) on top of `csvHeaderRows()` (name + export date + range). Mileage rows export the **full address** (`startAddressForExport`/`endAddressForExport`) plus a **Stops** column (waypoints). Fields are RFC-4180 quote-escaped via `csvField(_:)`.
 - **App:** currency placeholder, app version from bundle
 - Keyboard dismisses on scroll (`scrollDismissesKeyboard(.immediately)`)
@@ -425,6 +458,8 @@ BusinessTracker/
 │   ├── TaxReminders.swift           (local-notification scheduler for quarterly deadlines — opt-in, rescheduled on launch)
 │   ├── InvoiceReminders.swift       (local-notification scheduler for unpaid invoice due dates — opt-in, takes ModelContainer to fetch invoices)
 │   ├── UserAvatar.swift             (user's own avatar view + UserAvatarImage downscale helper — user_avatar @AppStorage)
+│   ├── CloudSyncStatusView.swift    (CloudSyncRow — read-only "iCloud Sync" status row; lives in the Backup & Sync section)
+│   ├── DataBackup.swift             (full JSON export/import of every record + synced settings; relationships via export-scoped UUIDs; additive import)
 │   ├── MoreAppsView.swift           (PromotedApp + GarbenApps.all + MoreAppsSection — "More from Garben Technologies")
 │   └── RecentlyDeletedView.swift    (30-day trash — restore / permanent delete across all six soft-deleted types)
 ├── Shortcuts/
@@ -593,7 +628,7 @@ Consolidated list to work through before App Store submission. (Reviewed 2026-06
 ## Known patterns / gotchas
 
 - **CloudKit model rules (all must be followed or CloudKit silently falls back to local-only):**
-  1. Every stored attribute needs a default on the *property declaration* — `var name: String = ""` not just `var name: String` (CloudKit reads metadata, not `init`)
+  1. Every stored attribute needs a default on the *property declaration* — `var name: String = ""` not just `var name: String` (CloudKit reads metadata, not `init`). **This same default-on-declaration rule is also what keeps app-update migrations safe — see "⚠️ Schema changes & data safety" above before changing any `@Model`.**
   2. All to-many relationships must be `[T]? = nil`, not `[T] = []` — access sites use `(x ?? [])`
   3. Every relationship must have an inverse defined with `@Relationship(inverse:)`
   4. Use `Double` not `Decimal` for monetary values — CloudKit has no native Decimal type

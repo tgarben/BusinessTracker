@@ -8,7 +8,6 @@ enum TaxReminders {
     static let enabledKey = "tax_remindersEnabled"
     private static let idPrefix = "tax-deadline-"
     private static let leadDays = [7, 1]   // notify a week out and the day before
-    private static let fireHour = 9         // 9am local
 
     /// The four quarterly deadlines for the current cycle (Q4 rolls into next year).
     static func dueDates(from ref: Date = .now, calendar: Calendar = .current) -> [(label: String, date: Date)] {
@@ -53,7 +52,8 @@ enum TaxReminders {
                 content.sound = .default
 
                 var comps = cal.dateComponents([.year, .month, .day], from: fire)
-                comps.hour = fireHour
+                comps.hour = ReminderTime.hour
+                comps.minute = ReminderTime.minute
                 let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
                 let request = UNNotificationRequest(identifier: "\(idPrefix)\(due.label)-\(lead)", content: content, trigger: trigger)
                 try? await center.add(request)
