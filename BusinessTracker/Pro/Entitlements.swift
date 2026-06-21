@@ -67,7 +67,7 @@ enum ProFeature: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .invoicing:        return "Invoicing"
-        case .quotes:           return "Estimates"
+        case .quotes:           return "Quotes"
         case .reports:          return "Reports & Analytics"
         case .dataExport:       return "Data Export"
         case .unlimitedClients: return "Unlimited Clients"
@@ -77,7 +77,7 @@ enum ProFeature: String, CaseIterable, Identifiable {
     var blurb: String {
         switch self {
         case .invoicing:        return "Create, brand, and send professional invoice PDFs."
-        case .quotes:           return "Send estimates and convert them to invoices in a tap."
+        case .quotes:           return "Send quotes and convert them to invoices in a tap."
         case .reports:          return "Date-range reports, client P&L, and tax set-aside."
         case .dataExport:       return "Export your time, mileage, and expenses to CSV."
         case .unlimitedClients: return "Track as many clients and projects as you need."

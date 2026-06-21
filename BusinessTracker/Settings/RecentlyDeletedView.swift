@@ -65,11 +65,11 @@ struct RecentlyDeletedView: View {
                            subtitle: "\(inc.amount.asCurrency) · \(inc.date.formatted(date: .abbreviated, time: .omitted))"))
         }
         for inv in invoices {
-            all.append(row(for: inv, icon: "doc.text.fill", color: .purple, title: inv.formattedNumber,
+            all.append(row(for: inv, icon: "doc.text.fill", color: .purple, title: inv.displayTitle,
                            subtitle: "\(inv.subtotal.asCurrency) · \(inv.issueDate.formatted(date: .abbreviated, time: .omitted))"))
         }
         for q in quotes {
-            all.append(row(for: q, icon: "list.clipboard.fill", color: .teal, title: q.formattedNumber,
+            all.append(row(for: q, icon: "list.clipboard.fill", color: .teal, title: q.displayTitle,
                            subtitle: "\(q.total.asCurrency) · \(q.issueDate.formatted(date: .abbreviated, time: .omitted))"))
         }
         for c in clients {

@@ -17,8 +17,9 @@ struct InvoiceRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(invoice.formattedNumber)
+                Text(invoice.displayTitle)
                     .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
                 Spacer()
                 Text(invoice.total.asCurrency)
                     .font(.caption.weight(.semibold))
@@ -179,6 +180,7 @@ private struct CreateInvoiceContent: View {
     @State private var selectedEntryIDs: Set<PersistentIdentifier> = []
     @State private var drafts: [DraftLineItem] = []
     @State private var discountText: String = ""
+    @State private var discountIsPercent: Bool = false
     @State private var taxRateText: String = ""
     @State private var paymentTerms: String = "Due Upon Receipt"
     @State private var acceptedPayments: String = ""
@@ -219,7 +221,9 @@ private struct CreateInvoiceContent: View {
     }
 
     private var unbilledEntries: [TimeEntry] {
-        clientTimeEntries.filter { $0.invoice == nil }
+        // Available = not yet billed, OR billed to an invoice that's since been
+        // (soft-)deleted — so deleting an invoice frees its time entries again.
+        clientTimeEntries.filter { $0.invoice == nil || $0.invoice?.deletedDate != nil }
     }
 
     private var selectedTotal: Double {
@@ -230,7 +234,9 @@ private struct CreateInvoiceContent: View {
 
     private var itemsTotal: Double { drafts.reduce(0) { $0 + $1.lineTotal } }
     private var subtotal: Double { selectedTotal + itemsTotal }
-    private var discount: Double { Double(discountText) ?? 0 }
+    private var discountInput: Double { Double(discountText) ?? 0 }
+    /// Discount as a dollar figure (resolves the percent case for live totals).
+    private var discount: Double { discountIsPercent ? subtotal * (discountInput / 100) : discountInput }
     private var taxRate: Double { Double(taxRateText) ?? 0 }
     private var discountedSubtotal: Double { max(0, subtotal - discount) }
     private var taxAmount: Double { discountedSubtotal * (taxRate / 100) }
@@ -347,12 +353,26 @@ private struct CreateInvoiceContent: View {
                 totalRow("Subtotal", subtotal, weight: .regular)
                 HStack {
                     Text("Discount")
+                    Picker("", selection: $discountIsPercent) {
+                        Text("$").tag(false)
+                        Text("%").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 88)
                     Spacer()
-                    Text("$").foregroundStyle(.secondary)
-                    TextField("0.00", text: $discountText)
+                    if !discountIsPercent { Text("$").foregroundStyle(.secondary) }
+                    TextField(discountIsPercent ? "0" : "0.00", text: $discountText)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
+                        .frame(width: 60)
+                    if discountIsPercent { Text("%").foregroundStyle(.secondary) }
+                    if discountIsPercent {
+                        Text("−\(discount.asCurrency)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 76, alignment: .trailing)
+                    }
                 }
                 HStack {
                     Text("Sales Tax")
@@ -476,7 +496,8 @@ private struct CreateInvoiceContent: View {
             client: client,
             notes: notes
         )
-        invoice.discountAmount = discount
+        invoice.discountAmount = discountInput
+        invoice.discountIsPercent = discountIsPercent
         invoice.taxRate = taxRate
         invoice.paymentTerms = paymentTerms
         invoice.acceptedPayments = acceptedPayments
@@ -501,7 +522,7 @@ private struct CreateInvoiceContent: View {
         // Persist so the PDF render sees the finalized relationships, then preview it.
         try? modelContext.save()
         if let url = makeInvoicePDF(invoice: invoice, userName: userFullName()) {
-            preview = PreviewDoc(url: url, title: invoice.formattedNumber, toast: "Invoice Created")
+            preview = PreviewDoc(url: url, title: invoice.displayTitle, toast: "Invoice Created")
         } else {
             finish()
         }
@@ -512,10 +533,35 @@ private struct CreateInvoiceContent: View {
 
 struct InvoiceDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     let invoice: Invoice
 
+    @Query(filter: #Predicate<Invoice> { $0.deletedDate == nil }, sort: \Invoice.invoiceNumber, order: .reverse) private var allInvoices: [Invoice]
+    @AppStorage("doc_numberResetYearly") private var resetYearly = false
+
     @AppStorage("user_name") private var userName: String = ""
+    @AppStorage("business_paymentLink") private var businessPaymentLink: String = ""
+
+    @State private var duplicated: Invoice?
+
+    /// Next invoice number — highest existing + 1 (year-scoped when reset-yearly is on).
+    private var nextInvoiceNumber: Int {
+        if resetYearly {
+            let year = Calendar.current.component(.year, from: .now)
+            let inYear = allInvoices.filter { Calendar.current.component(.year, from: $0.issueDate) == year }
+            return (inYear.map(\.invoiceNumber).max() ?? 0) + 1
+        }
+        return (allInvoices.map(\.invoiceNumber).max() ?? 0) + 1
+    }
+
+    /// The configured pay-online link, normalized to an openable https URL string.
+    private var payLinkURL: String {
+        let raw = businessPaymentLink.trimmingCharacters(in: .whitespaces)
+        guard !raw.isEmpty else { return "" }
+        if raw.hasPrefix("http://") || raw.hasPrefix("https://") { return raw }
+        return "https://\(raw)"
+    }
 
     @State private var showMarkPaidSheet = false
     @State private var showUnpaidConfirm = false
@@ -576,8 +622,11 @@ struct InvoiceDetailView: View {
 
                 Section("Totals") {
                     detailTotalRow("Subtotal", invoice.subtotal, color: .primary)
-                    if invoice.discountAmount > 0 {
-                        detailTotalRow("Discount", -invoice.discountAmount, color: .secondary)
+                    if invoice.effectiveDiscount > 0 {
+                        let label = invoice.discountIsPercent
+                            ? "Discount (\(invoice.discountAmount.formatted(.number.precision(.fractionLength(0...2))))%)"
+                            : "Discount"
+                        detailTotalRow(label, -invoice.effectiveDiscount, color: .secondary)
                     }
                     if invoice.taxRate > 0 {
                         detailTotalRow("Sales Tax (\(invoice.taxRate.formatted(.number.precision(.fractionLength(0...2))))%)", invoice.taxAmount, color: .secondary)
@@ -591,13 +640,19 @@ struct InvoiceDetailView: View {
                     }
                 }
 
-                if !invoice.paymentTerms.isEmpty || !invoice.acceptedPayments.isEmpty || !invoice.paymentInstructions.isEmpty {
+                if !invoice.paymentTerms.isEmpty || !invoice.acceptedPayments.isEmpty || !invoice.paymentInstructions.isEmpty || !payLinkURL.isEmpty {
                     Section("Payment") {
                         if !invoice.paymentTerms.isEmpty {
                             LabeledContent("Terms", value: invoice.paymentTerms)
                         }
                         if !invoice.acceptedPayments.isEmpty {
                             LabeledContent("Accepted", value: invoice.acceptedPayments)
+                        }
+                        if let url = URL(string: payLinkURL), !payLinkURL.isEmpty {
+                            Link(destination: url) {
+                                Label("Pay Online", systemImage: "link")
+                                    .font(.subheadline.weight(.medium))
+                            }
                         }
                         if !invoice.paymentInstructions.isEmpty {
                             VStack(alignment: .leading, spacing: 2) {
@@ -615,9 +670,19 @@ struct InvoiceDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Section {
+                    Button {
+                        duplicateInvoice()
+                    } label: {
+                        Label("Duplicate Invoice", systemImage: "doc.on.doc")
+                    }
+                } footer: {
+                    Text("Creates a new unpaid invoice with the same line items and settings. Billed time entries aren't copied.")
+                }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(invoice.formattedNumber)
+            .navigationTitle(invoice.displayTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -626,7 +691,7 @@ struct InvoiceDetailView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Group {
                         if let url = pdfURL {
-                            ShareLink(item: url, subject: Text(invoice.formattedNumber)) {
+                            ShareLink(item: url, subject: Text(invoice.displayTitle)) {
                                 Image(systemName: "square.and.arrow.up")
                             }
                             .accessibilityLabel("Share Invoice")
@@ -670,7 +735,40 @@ struct InvoiceDetailView: View {
             } message: {
                 Text("This will clear the payment date.")
             }
+            .sheet(item: $duplicated) { InvoiceDetailView(invoice: $0) }
         }
+    }
+
+    /// Clones this invoice into a new unpaid one (manual line items + settings;
+    /// not the billed time entries) and opens it.
+    private func duplicateInvoice() {
+        let gap = Calendar.current.dateComponents([.day], from: invoice.issueDate, to: invoice.dueDate).day ?? 30
+        let new = Invoice(
+            invoiceNumber: nextInvoiceNumber,
+            issueDate: .now,
+            dueDate: Calendar.current.date(byAdding: .day, value: max(0, gap), to: .now) ?? .now,
+            client: invoice.client,
+            notes: invoice.notes
+        )
+        new.discountAmount = invoice.discountAmount
+        new.discountIsPercent = invoice.discountIsPercent
+        new.taxRate = invoice.taxRate
+        new.paymentTerms = invoice.paymentTerms
+        new.acceptedPayments = invoice.acceptedPayments
+        new.paymentInstructions = invoice.paymentInstructions
+        new.poNumber = invoice.poNumber
+        modelContext.insert(new)
+        for item in (invoice.lineItems ?? []).sorted(by: { $0.sortOrder < $1.sortOrder }) {
+            modelContext.insert(InvoiceLineItem(
+                itemDescription: item.itemDescription,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                sortOrder: item.sortOrder,
+                invoice: new
+            ))
+        }
+        try? modelContext.save()
+        duplicated = new
     }
 
     private func lineItemRow(_ entry: TimeEntry) -> some View {
@@ -779,6 +877,7 @@ private struct MarkPaidSheet: View {
 /// Standardized business "from" info, read from the same UserDefaults keys as Settings.
 struct BusinessInfo {
     var name: String, address: String, address2: String, phone: String, email: String, website: String, taxID: String
+    var paymentLink: String = ""
     var logoData: Data? = nil
 
     static func load(fallbackName: String) -> BusinessInfo {
@@ -792,6 +891,7 @@ struct BusinessInfo {
             email: d.string(forKey: "business_email") ?? "",
             website: d.string(forKey: "business_website") ?? "",
             taxID: d.string(forKey: "business_taxID") ?? "",
+            paymentLink: d.string(forKey: "business_paymentLink") ?? "",
             logoData: d.data(forKey: "business_logo")
         )
     }
@@ -849,6 +949,7 @@ func makeInvoicePDF(invoice: Invoice, userName: String) -> URL? {
         logoData: business.logoData,
         typeLabel: "INVOICE",
         number: invoice.formattedNumber,
+        fileName: invoice.shareFileName,
         recipientLabel: "BILL TO",
         recipientName: invoice.client?.name ?? "",
         recipientCompany: invoice.client?.companyName ?? "",
@@ -860,7 +961,7 @@ func makeInvoicePDF(invoice: Invoice, userName: String) -> URL? {
         rateColumnHeader: "RATE",
         rows: invoiceDocRows(for: invoice),
         subtotal: invoice.subtotal,
-        discountAmount: invoice.discountAmount,
+        discountAmount: invoice.effectiveDiscount,
         taxRate: invoice.taxRate,
         taxAmount: invoice.taxAmount,
         total: invoice.total,
@@ -868,6 +969,7 @@ func makeInvoicePDF(invoice: Invoice, userName: String) -> URL? {
         paymentTerms: invoice.paymentTerms,
         acceptedPayments: invoice.acceptedPayments,
         paymentInstructions: invoice.paymentInstructions,
+        paymentLink: business.paymentLink,
         notes: invoice.notes,
         showAcceptanceLine: false
     )

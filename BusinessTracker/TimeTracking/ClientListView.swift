@@ -18,9 +18,32 @@ struct ClientsView: View {
     @State private var pendingDelete: IndexSet?
     @State private var paywall: ProFeature?
 
+    /// Soft-deletes a client and cascades the trash to all of its child records
+    /// (time, income, expenses, invoices, quotes) so none linger in global lists
+    /// during the 30-day window. Projects aren't soft-deletable — they're removed
+    /// by the real cascade when the client is permanently purged. Restoring the
+    /// client (from Recently Deleted) brings back the client only; the children
+    /// keep their own 30-day trash timers.
+    private func softDeleteClient(_ client: Client) {
+        let now = Date.now
+        for t in (client.timeEntries ?? [])   where t.deletedDate == nil { t.deletedDate = now }
+        for i in (client.incomeEntries ?? []) where i.deletedDate == nil { i.deletedDate = now }
+        for e in (client.expenses ?? [])      where e.deletedDate == nil { e.deletedDate = now }
+        for inv in (client.invoices ?? [])    where inv.deletedDate == nil { inv.deletedDate = now }
+        for q in (client.quotes ?? [])        where q.deletedDate == nil { q.deletedDate = now }
+        client.deletedDate = now
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                // ===== Free-tier usage hint — REMOVE this block (and the
+                // FreeClientUsageHint view below) to drop the feature entirely. =====
+                if Entitlements.monetizationEnabled && !pro.isProEffective {
+                    FreeClientUsageHint(used: clients.count)
+                }
+                // ====================================================================
+
                 ForEach(clients) { client in
                     NavigationLink {
                         ClientDetailView(client: client)
@@ -51,7 +74,7 @@ struct ClientsView: View {
                     Image(systemName: "plus")
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 58, height: 58)
+                        .frame(width: 55, height: 55)
                         .background(.teal, in: Circle())
                         .shadow(color: .teal.opacity(0.35), radius: 10, x: 0, y: 4)
                 }
@@ -77,17 +100,47 @@ struct ClientsView: View {
             ), titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let offsets = pendingDelete {
-                        for index in offsets { clients[index].deletedDate = .now }
+                        for index in offsets { softDeleteClient(clients[index]) }
                     }
                     pendingDelete = nil
                 }
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: {
-                Text("The client is moved to Recently Deleted. Restore within 30 days to recover it and its projects.")
+                Text("The client and all its time, income, expenses, invoices and quotes are moved to Recently Deleted. Restoring brings back the client only.")
             }
         }
     }
 }
+
+// ===== Free-tier usage hint (REMOVABLE) =================================
+// Self-contained "X of N free clients used" row, shown only when monetization
+// is live and the user is on the free tier. To remove the feature, delete this
+// view and its single call site in `ClientsView.body`.
+private struct FreeClientUsageHint: View {
+    let used: Int
+
+    var body: some View {
+        let limit = Entitlements.freeClientLimit
+        let atCap = used >= limit
+        HStack(spacing: 12) {
+            Image(systemName: atCap ? "lock.fill" : "person.2.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(atCap ? Color.orange : Color.teal, in: RoundedRectangle(cornerRadius: 7))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(min(used, limit)) of \(limit) free clients used")
+                    .font(.subheadline.weight(.medium))
+                Text(atCap ? "Upgrade to Pro for unlimited clients." : "Your free plan includes \(limit) clients.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 2)
+    }
+}
+// ========================================================================
 
 // MARK: - Client cell
 
@@ -316,10 +369,10 @@ struct ClientDetailView: View {
                 }
             }
 
-            // MARK: Quotes / Estimates section
+            // MARK: Quotes section
             Section {
                 if quotes.isEmpty {
-                    Text("No estimates yet")
+                    Text("No quotes yet")
                         .font(.subheadline)
                         .foregroundStyle(.tertiary)
                         .padding(.vertical, 4)
@@ -333,7 +386,7 @@ struct ClientDetailView: View {
                 }
             } header: {
                 HStack {
-                    Text("Estimates")
+                    Text("Quotes")
                     Spacer()
                     Button {
                         if pro.isProEffective { showCreateQuote = true } else { paywall = .quotes }
@@ -341,7 +394,7 @@ struct ClientDetailView: View {
                         Image(systemName: "plus")
                             .font(.caption.weight(.semibold))
                     }
-                    .accessibilityLabel("New Estimate")
+                    .accessibilityLabel("New Quote")
                 }
             }
 
@@ -501,7 +554,7 @@ struct ClientDetailView: View {
             }
             Button("Cancel", role: .cancel) { pendingDeleteInvoice = nil }
         } message: { Text("The invoice is moved to Recently Deleted. Restore within 30 days to recover it.") }
-        .confirmationDialog("Delete Estimate?", isPresented: Binding(
+        .confirmationDialog("Delete Quote?", isPresented: Binding(
             get: { pendingDeleteQuote != nil },
             set: { if !$0 { pendingDeleteQuote = nil } }
         ), titleVisibility: .visible) {
@@ -512,7 +565,7 @@ struct ClientDetailView: View {
                 pendingDeleteQuote = nil
             }
             Button("Cancel", role: .cancel) { pendingDeleteQuote = nil }
-        } message: { Text("The estimate is moved to Recently Deleted. Restore within 30 days to recover it.") }
+        } message: { Text("The quote is moved to Recently Deleted. Restore within 30 days to recover it.") }
     }
 }
 

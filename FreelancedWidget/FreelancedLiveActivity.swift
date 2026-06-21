@@ -28,17 +28,14 @@ private var brandGradient: LinearGradient {
 private struct TimerAppBadge: View {
     var size: CGFloat = 50
     var corner: CGFloat = 13
-    var iconSize: CGFloat = 25
+    var iconSize: CGFloat = 25   // retained for call-site compatibility (unused now)
 
     var body: some View {
-        RoundedRectangle(cornerRadius: corner, style: .continuous)
-            .fill(brandGradient)
+        Image("freelancedLogo")
+            .resizable()
+            .scaledToFill()
             .frame(width: size, height: size)
-            .overlay(
-                Image(systemName: "stopwatch.fill")
-                    .font(.system(size: iconSize, weight: .bold))
-                    .foregroundStyle(.white)
-            )
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
                     .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)

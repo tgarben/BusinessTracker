@@ -35,7 +35,11 @@ enum CloudKeyValueSync {
         "business_defaultPaymentTerms",
         "business_acceptedPayments",
         "business_paymentInstructions",
+        "business_paymentLink",
         "business_logo",        // downscaled PNG (Data) — see UserAvatarImage.processedLogo
+
+        // App-wide currency
+        "app_currencyCode",
 
         // Document numbering
         "doc_invoicePrefix",

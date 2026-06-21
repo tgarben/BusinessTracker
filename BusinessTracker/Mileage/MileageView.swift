@@ -3,6 +3,8 @@ import SwiftData
 
 struct MileageView: View {
     @Query(filter: #Predicate<MileageTrip> { $0.deletedDate == nil }, sort: \MileageTrip.date, order: .reverse) private var trips: [MileageTrip]
+    @Query(filter: #Predicate<MileageTrip> { $0.deletedDate == nil && $0.isAutoDetected && $0.needsReview },
+           sort: \MileageTrip.date, order: .reverse) private var reviewTrips: [MileageTrip]
     @Environment(\.modelContext) private var modelContext
 
     @State private var showLogTrip = false
@@ -10,6 +12,10 @@ struct MileageView: View {
     @State private var showSettings = false
     @State private var editingTrip: MileageTrip?
     @State private var pendingDelete: ([MileageTrip], IndexSet)?
+
+    /// Trips shown in the normal day-grouped list — auto-detected drives awaiting
+    /// review live in their own section until confirmed.
+    private var listedTrips: [MileageTrip] { trips.filter { !$0.needsReview } }
 
     private var monthTrips: [MileageTrip] {
         let start = Calendar.current.startOfMonth(for: .now)
@@ -22,6 +28,15 @@ struct MileageView: View {
     var body: some View {
         NavigationStack {
             List {
+                // Live tracked trip — pinned at top while recording
+                if TripTracker.shared.isTracking {
+                    Section {
+                        TripInProgressCard(onStop: { trip in if let trip { editingTrip = trip } })
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                    }
+                }
+
                 if !trips.isEmpty {
                     Section {
                         MileageSummaryCard(
@@ -34,8 +49,35 @@ struct MileageView: View {
                     }
                 }
 
-                if !trips.isEmpty {
-                    let grouped = Dictionary(grouping: trips) {
+                // Auto-detected drives awaiting review (Auto-Mileage)
+                if !reviewTrips.isEmpty {
+                    Section {
+                        ForEach(reviewTrips) { trip in
+                            TripRow(trip: trip)
+                                .contentShape(Rectangle())
+                                .onTapGesture { editingTrip = trip }
+                                .swipeActions(edge: .leading) {
+                                    Button { markReviewed(trip) } label: {
+                                        Label("Confirm", systemImage: "checkmark")
+                                    }
+                                    .tint(.green)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) { trip.deletedDate = .now } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                        }
+                    } header: {
+                        Label("Drives to Review", systemImage: "car.circle.fill")
+                            .foregroundStyle(.orange)
+                    } footer: {
+                        Text("Auto-detected drives. Tap to set a category, swipe right to confirm, or swipe left to delete.")
+                    }
+                }
+
+                if !listedTrips.isEmpty {
+                    let grouped = Dictionary(grouping: listedTrips) {
                         Calendar.current.startOfDay(for: $0.date)
                     }
                     let sortedDays = grouped.keys.sorted(by: >)
@@ -56,11 +98,11 @@ struct MileageView: View {
             }
             .listStyle(.insetGrouped)
             .overlay {
-                if trips.isEmpty {
+                if trips.isEmpty && !TripTracker.shared.isTracking {
                     ContentUnavailableView(
                         "No Trips Logged",
                         systemImage: "car",
-                        description: Text("Tap + to log your first business trip.")
+                        description: Text("Tap the play button to track a drive live, or + to log one manually.")
                     )
                 }
             }
@@ -70,6 +112,7 @@ struct MileageView: View {
                     Button { showSettings = true } label: {
                         ProfileToolbarLabel()
                     }
+                    .accessibilityLabel("Profile & Settings")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("History") { showHistory = true }
@@ -77,16 +120,32 @@ struct MileageView: View {
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                Button { showLogTrip = true } label: {
-                    Image(systemName: "plus")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 58, height: 58)
-                        .background(.blue, in: Circle())
-                        .shadow(color: .blue.opacity(0.35), radius: 10, x: 0, y: 4)
+                if !TripTracker.shared.isTracking {
+                    VStack(spacing: 14) {
+                        // Start a live-tracked trip
+                        Button { TripTracker.shared.startTrip() } label: {
+                            Image(systemName: "location.fill")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 55, height: 55)
+                                .background(.green, in: Circle())
+                                .shadow(color: .green.opacity(0.35), radius: 10, x: 0, y: 4)
+                        }
+                        .accessibilityLabel("Start Tracked Trip")
+                        // Manual entry
+                        Button { showLogTrip = true } label: {
+                            Image(systemName: "plus")
+                                .font(.title2.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 55, height: 55)
+                                .background(.blue, in: Circle())
+                                .shadow(color: .blue.opacity(0.35), radius: 10, x: 0, y: 4)
+                        }
+                        .accessibilityLabel("Log Trip Manually")
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
                 }
-                .padding(.trailing, 20)
-                .padding(.bottom, 20)
             }
             .sheet(isPresented: $showLogTrip) {
                 LogTripView()
@@ -119,6 +178,11 @@ struct MileageView: View {
 
     private func deleteTrips(from trips: [MileageTrip], at offsets: IndexSet) {
         for index in offsets { trips[index].deletedDate = .now }
+    }
+
+    /// Clears the needs-review flag so an auto-detected drive joins the normal list.
+    private func markReviewed(_ trip: MileageTrip) {
+        trip.needsReview = false
     }
 }
 
@@ -156,6 +220,56 @@ struct MileageSummaryCard: View {
 
 // MARK: - Shared trip row (used by MileageView + MileageMonthDetailView)
 
+// MARK: - Live tracked-trip card
+
+struct TripInProgressCard: View {
+    /// Called when the user stops — receives the saved trip so the parent can open its editor.
+    var onStop: (MileageTrip?) -> Void
+
+    private var tracker: TripTracker { TripTracker.shared }
+    private var accent: Color { tracker.isPaused ? .orange : .green }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(tracker.isPaused ? "Trip Paused" : "Tracking Trip",
+                          systemImage: tracker.isPaused ? "pause.circle" : "location.fill")
+                        .font(.caption.bold())
+                        .foregroundStyle(accent)
+                    Text(String(format: "%.1f mi", tracker.miles))
+                        .font(.title2.monospacedDigit().bold())
+                    Text(tracker.elapsed.timerFormatted)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    if tracker.isPaused { tracker.resume() } else { tracker.pause() }
+                } label: {
+                    Image(systemName: tracker.isPaused ? "play.circle.fill" : "pause.circle.fill")
+                        .font(.title)
+                        .foregroundStyle(tracker.isPaused ? .green : .orange)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tracker.isPaused ? "Resume Trip" : "Pause Trip")
+
+                Button { onStop(tracker.stopTrip()) } label: {
+                    Image(systemName: "stop.circle.fill")
+                        .font(.title)
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Stop & Save Trip")
+            }
+            .padding()
+            .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+        }
+    }
+}
+
 struct TripRow: View {
     let trip: MileageTrip
 
@@ -163,8 +277,17 @@ struct TripRow: View {
         VStack(alignment: .leading, spacing: 8) {
             // Purpose + miles badge
             HStack(alignment: .center) {
-                Text(trip.purpose)
+                Text(trip.purpose.isEmpty ? "Uncategorized" : trip.purpose)
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(trip.purpose.isEmpty ? .secondary : .primary)
+                if trip.isAutoDetected {
+                    Text("AUTO")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.blue)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.blue.opacity(0.12), in: Capsule())
+                }
                 Spacer()
                 Text(String(format: "%.1f mi", trip.miles))
                     .font(.caption.weight(.semibold))

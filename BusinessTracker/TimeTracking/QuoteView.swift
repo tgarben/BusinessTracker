@@ -127,6 +127,7 @@ private struct CreateQuoteContent: View {
     @State private var validUntil: Date = Calendar.current.date(byAdding: .day, value: 30, to: .now) ?? .now
     @State private var drafts: [DraftQuoteLineItem] = [DraftQuoteLineItem()]
     @State private var discountText: String = ""
+    @State private var discountIsPercent: Bool = false
     @State private var taxRateText: String = ""
     @State private var paymentTerms: String = "Due Upon Receipt"
     @State private var acceptedPayments: String = ""
@@ -153,7 +154,9 @@ private struct CreateQuoteContent: View {
 
     private var itemsTotal: Double { drafts.reduce(0) { $0 + $1.lineTotal } }
     private var subtotal: Double { itemsTotal }
-    private var discount: Double { Double(discountText) ?? 0 }
+    private var discountInput: Double { Double(discountText) ?? 0 }
+    /// Discount as a dollar figure (resolves the percent case for live totals).
+    private var discount: Double { discountIsPercent ? subtotal * (discountInput / 100) : discountInput }
     private var taxRate: Double { Double(taxRateText) ?? 0 }
     private var discountedSubtotal: Double { max(0, subtotal - discount) }
     private var taxAmount: Double { discountedSubtotal * (taxRate / 100) }
@@ -171,15 +174,15 @@ private struct CreateQuoteContent: View {
                     LabeledContent("Company", value: client.companyName)
                 }
                 if client.billingAddress.isEmpty || client.email.isEmpty {
-                    Text("Tip: add this client's billing address, email & phone in their profile to include them on the estimate.")
+                    Text("Tip: add this client's billing address, email & phone in their profile to include them on the quote.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Estimate Details") {
+            Section("Quote Details") {
                 HStack {
-                    Text("Estimate #")
+                    Text("Quote #")
                     Spacer()
                     TextField("001", text: $quoteNumberText)
                         .multilineTextAlignment(.trailing)
@@ -248,12 +251,26 @@ private struct CreateQuoteContent: View {
                 totalRow("Subtotal", subtotal, weight: .regular)
                 HStack {
                     Text("Discount")
+                    Picker("", selection: $discountIsPercent) {
+                        Text("$").tag(false)
+                        Text("%").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 88)
                     Spacer()
-                    Text("$").foregroundStyle(.secondary)
-                    TextField("0.00", text: $discountText)
+                    if !discountIsPercent { Text("$").foregroundStyle(.secondary) }
+                    TextField(discountIsPercent ? "0" : "0.00", text: $discountText)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
+                        .frame(width: 60)
+                    if discountIsPercent { Text("%").foregroundStyle(.secondary) }
+                    if discountIsPercent {
+                        Text("−\(discount.asCurrency)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 76, alignment: .trailing)
+                    }
                 }
                 HStack {
                     Text("Sales Tax")
@@ -294,7 +311,7 @@ private struct CreateQuoteContent: View {
                     .lineLimit(3...6)
             }
         }
-        .navigationTitle("New Estimate")
+        .navigationTitle("New Quote")
         .navigationSubtitle(client.name)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.immediately)
@@ -344,7 +361,8 @@ private struct CreateQuoteContent: View {
             client: client,
             notes: notes
         )
-        quote.discountAmount = discount
+        quote.discountAmount = discountInput
+        quote.discountIsPercent = discountIsPercent
         quote.taxRate = taxRate
         quote.paymentTerms = paymentTerms
         quote.acceptedPayments = acceptedPayments
@@ -366,7 +384,7 @@ private struct CreateQuoteContent: View {
         try? modelContext.save()
         if let url = makeQuotePDF(quote: quote, userName: userFullName()) {
             preview = PreviewDoc(
-                url: url, title: quote.formattedNumber, toast: "Estimate Created",
+                url: url, title: quote.displayTitle, toast: "Quote Created",
                 onSent: { if quote.statusValue == .draft { quote.status = QuoteStatus.sent.rawValue } }
             )
         } else {
@@ -384,10 +402,23 @@ struct QuoteDetailView: View {
     let quote: Quote
 
     @Query(filter: #Predicate<Invoice> { $0.deletedDate == nil }, sort: \Invoice.invoiceNumber, order: .reverse) private var allInvoices: [Invoice]
+    @Query(filter: #Predicate<Quote> { $0.deletedDate == nil }, sort: \Quote.quoteNumber, order: .reverse) private var allQuotes: [Quote]
+    @AppStorage("doc_numberResetYearly") private var resetYearly = false
 
     @State private var shareItem: SharePDF?
     @State private var showConvertConfirm = false
     @State private var createdInvoice: Invoice?
+    @State private var duplicatedQuote: Quote?
+
+    /// Next quote number — highest existing + 1 (year-scoped when reset-yearly is on).
+    private var nextQuoteNumber: Int {
+        if resetYearly {
+            let year = Calendar.current.component(.year, from: .now)
+            let inYear = allQuotes.filter { Calendar.current.component(.year, from: $0.issueDate) == year }
+            return (inYear.map(\.quoteNumber).max() ?? 0) + 1
+        }
+        return (allQuotes.map(\.quoteNumber).max() ?? 0) + 1
+    }
 
     /// Marks a still-Draft estimate as Sent once it's actually shared (not saved).
     private func markSentIfDraft() {
@@ -403,8 +434,8 @@ struct QuoteDetailView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Estimate Info") {
-                    LabeledContent("Estimate #", value: quote.formattedNumber)
+                Section("Quote Info") {
+                    LabeledContent("Quote #", value: quote.formattedNumber)
                     LabeledContent("Client", value: quote.client?.name ?? "—")
                     if let company = quote.client?.companyName, !company.isEmpty {
                         LabeledContent("Company", value: company)
@@ -454,8 +485,11 @@ struct QuoteDetailView: View {
 
                 Section("Totals") {
                     detailTotalRow("Subtotal", quote.subtotal, color: .primary)
-                    if quote.discountAmount > 0 {
-                        detailTotalRow("Discount", -quote.discountAmount, color: .secondary)
+                    if quote.effectiveDiscount > 0 {
+                        let label = quote.discountIsPercent
+                            ? "Discount (\(quote.discountAmount.formatted(.number.precision(.fractionLength(0...2))))%)"
+                            : "Discount"
+                        detailTotalRow(label, -quote.effectiveDiscount, color: .secondary)
                     }
                     if quote.taxRate > 0 {
                         detailTotalRow("Sales Tax (\(quote.taxRate.formatted(.number.precision(.fractionLength(0...2))))%)", quote.taxAmount, color: .secondary)
@@ -503,11 +537,22 @@ struct QuoteDetailView: View {
                               systemImage: "arrow.right.doc.on.clipboard")
                     }
                 } footer: {
-                    Text("Creates a new invoice from this estimate's line items and marks it Accepted.")
+                    Text("Creates a new invoice from this quote's line items and marks it Accepted.")
+                }
+
+                // MARK: Duplicate
+                Section {
+                    Button {
+                        duplicateQuote()
+                    } label: {
+                        Label("Duplicate Quote", systemImage: "doc.on.doc")
+                    }
+                } footer: {
+                    Text("Creates a new Draft quote with the same line items and settings.")
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(quote.formattedNumber)
+            .navigationTitle(quote.displayTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -521,7 +566,7 @@ struct QuoteDetailView: View {
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
-                    .accessibilityLabel("Share Estimate")
+                    .accessibilityLabel("Share Quote")
                 }
             }
             .sheet(item: $shareItem) { item in
@@ -535,10 +580,45 @@ struct QuoteDetailView: View {
                 Button("Create Invoice") { convertToInvoice() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("A new invoice will be created from this estimate and the estimate marked Accepted.")
+                Text("A new invoice will be created from this quote and the quote marked Accepted.")
             }
             .sheet(item: $createdInvoice) { InvoiceDetailView(invoice: $0) }
+            .sheet(item: $duplicatedQuote) { QuoteDetailView(quote: $0) }
         }
+    }
+
+    /// Clones this quote into a new Draft (line items + settings) and opens it.
+    private func duplicateQuote() {
+        let gap = Calendar.current.dateComponents([.day], from: quote.issueDate, to: quote.validUntil).day ?? 30
+        let new = Quote(
+            quoteNumber: nextQuoteNumber,
+            issueDate: .now,
+            validUntil: Calendar.current.date(byAdding: .day, value: max(0, gap), to: .now) ?? .now,
+            client: quote.client,
+            notes: quote.notes
+        )
+        new.discountAmount = quote.discountAmount
+        new.discountIsPercent = quote.discountIsPercent
+        new.taxRate = quote.taxRate
+        new.paymentTerms = quote.paymentTerms
+        new.acceptedPayments = quote.acceptedPayments
+        new.paymentInstructions = quote.paymentInstructions
+        new.poNumber = quote.poNumber
+        // Fresh Draft, not linked to any invoice.
+        new.status = QuoteStatus.draft.rawValue
+        new.convertedInvoiceNumber = 0
+        modelContext.insert(new)
+        for item in (quote.lineItems ?? []).sorted(by: { $0.sortOrder < $1.sortOrder }) {
+            modelContext.insert(QuoteLineItem(
+                itemDescription: item.itemDescription,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                sortOrder: item.sortOrder,
+                quote: new
+            ))
+        }
+        try? modelContext.save()
+        duplicatedQuote = new
     }
 
     private func itemRow(_ item: QuoteLineItem) -> some View {
@@ -580,6 +660,7 @@ struct QuoteDetailView: View {
             notes: quote.notes
         )
         invoice.discountAmount = quote.discountAmount
+        invoice.discountIsPercent = quote.discountIsPercent
         invoice.taxRate = quote.taxRate
         invoice.paymentTerms = quote.paymentTerms
         invoice.acceptedPayments = quote.acceptedPayments
@@ -632,8 +713,9 @@ func makeQuotePDF(quote: Quote, userName: String) -> URL? {
     let spec = DocumentPDFSpec(
         business: business,
         logoData: business.logoData,
-        typeLabel: "ESTIMATE",
+        typeLabel: "QUOTE",
         number: quote.formattedNumber,
+        fileName: quote.shareFileName,
         recipientLabel: "QUOTE FOR",
         recipientName: quote.client?.name ?? "",
         recipientCompany: quote.client?.companyName ?? "",
@@ -645,7 +727,7 @@ func makeQuotePDF(quote: Quote, userName: String) -> URL? {
         rateColumnHeader: "UNIT PRICE",
         rows: quoteDocRows(for: quote),
         subtotal: quote.subtotal,
-        discountAmount: quote.discountAmount,
+        discountAmount: quote.effectiveDiscount,
         taxRate: quote.taxRate,
         taxAmount: quote.taxAmount,
         total: quote.total,

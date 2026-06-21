@@ -23,8 +23,9 @@ struct DocPDFRow: Identifiable {
 struct DocumentPDFSpec {
     let business: BusinessInfo
     let logoData: Data?              // optional business logo for the header
-    let typeLabel: String            // "INVOICE" / "ESTIMATE"
-    let number: String               // formatted number; also the PDF filename
+    let typeLabel: String            // "INVOICE" / "QUOTE"
+    let number: String               // formatted number shown in the header (e.g. "INV-001")
+    var fileName: String? = nil      // PDF filename without extension; defaults to `number`
 
     // Recipient block
     let recipientLabel: String       // "BILL TO" / "QUOTE FOR"
@@ -54,6 +55,7 @@ struct DocumentPDFSpec {
     let paymentTerms: String
     let acceptedPayments: String
     let paymentInstructions: String
+    var paymentLink: String = ""     // optional "pay online" URL printed in the payment block
     let notes: String
     let showAcceptanceLine: Bool     // estimates add an Accepted By / Date line
 }
@@ -187,7 +189,7 @@ private func docPDFFooter(spec: DocumentPDFSpec) -> some View {
         .padding(.top, 14)
         .padding(.bottom, 18)
 
-        let hasPayment = !spec.paymentTerms.isEmpty || !spec.acceptedPayments.isEmpty || !spec.paymentInstructions.isEmpty
+        let hasPayment = !spec.paymentTerms.isEmpty || !spec.acceptedPayments.isEmpty || !spec.paymentInstructions.isEmpty || !spec.paymentLink.isEmpty
         if hasPayment || !spec.notes.isEmpty || !spec.business.taxID.isEmpty {
             docPDFDivider()
             VStack(alignment: .leading, spacing: 10) {
@@ -199,6 +201,9 @@ private func docPDFFooter(spec: DocumentPDFSpec) -> some View {
                         }
                         if !spec.acceptedPayments.isEmpty {
                             Text("Accepted: \(spec.acceptedPayments)").font(.system(size: 10)).foregroundColor(Color(white: 0.4))
+                        }
+                        if !spec.paymentLink.isEmpty {
+                            Text("Pay online: \(spec.paymentLink)").font(.system(size: 10, weight: .semibold)).foregroundColor(Color(red: 0.2, green: 0.4, blue: 0.85))
                         }
                         if !spec.paymentInstructions.isEmpty {
                             Text(spec.paymentInstructions).font(.system(size: 10)).foregroundColor(Color(white: 0.4))
@@ -403,8 +408,9 @@ func makeDocumentPDF(spec: DocumentPDFSpec) -> URL? {
         }
     }
 
+    let baseName = (spec.fileName?.isEmpty == false ? spec.fileName! : spec.number)
     let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent("\(spec.number).pdf")
+        .appendingPathComponent("\(baseName).pdf")
 
     var box = CGRect(origin: .zero, size: CGSize(width: 612, height: 792))
     let pdfData = NSMutableData()
@@ -438,4 +444,41 @@ func makeDocumentPDF(spec: DocumentPDFSpec) -> URL? {
     ctx.closePDF()
     try? pdfData.write(to: url)
     return url
+}
+
+// MARK: - Document naming
+
+/// Builds share filenames and in-app labels for invoices/quotes so a shared PDF
+/// is identifiable (e.g. `2026_06_19_ClancyBros_INV_001`) while the in-app label
+/// still carries the client name instead of a bare number.
+enum DocumentNaming {
+    /// Share filename (no extension), e.g. `2026_06_19_ClancyBros_INV_001`.
+    static func fileName(date: Date, clientName: String?, number: String) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy_MM_dd"
+        let datePart = f.string(from: date)
+        let namePart = condensedClient(clientName)
+        let numPart = number
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "")
+        return [datePart, namePart, numPart].filter { !$0.isEmpty }.joined(separator: "_")
+    }
+
+    /// In-app label, e.g. `INV-001 · Clancy Bros` (falls back to just the number).
+    static func displayTitle(clientName: String?, number: String) -> String {
+        let name = (clientName ?? "").trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? number : "\(number) · \(name)"
+    }
+
+    /// "Clancy Bros" → "ClancyBros"; strips punctuation, CamelCases words.
+    private static func condensedClient(_ name: String?) -> String {
+        guard let name else { return "" }
+        let cleaned = name.unicodeScalars.map {
+            CharacterSet.alphanumerics.contains($0) ? Character($0) : " "
+        }
+        return String(cleaned)
+            .split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined()
+    }
 }

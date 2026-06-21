@@ -1,6 +1,21 @@
 import SwiftUI
 import SwiftData
 
+/// Billing filter for the Time Tracking list.
+enum TimeBillingFilter: String, CaseIterable, Identifiable {
+    case all = "All Entries"
+    case unbilled = "Unbilled"
+    case billed = "Billed"
+    var id: String { rawValue }
+    var menuLabel: String {
+        switch self {
+        case .all:      return "All Entries"
+        case .unbilled: return "Unbilled"
+        case .billed:   return "Billed"
+        }
+    }
+}
+
 struct TimeTrackingView: View {
     @Environment(TimerState.self) private var timerState
     @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }, sort: \TimeEntry.date, order: .reverse) private var entries: [TimeEntry]
@@ -11,8 +26,24 @@ struct TimeTrackingView: View {
     @State private var showHistory = false
     @State private var entryToEdit: TimeEntry?
     @State private var pendingDelete: ([TimeEntry], IndexSet)?
+    @State private var billingFilter: TimeBillingFilter = .all
 
-    // Week summary
+    // An entry counts as "billed" only when its invoice still exists (a
+    // soft-deleted invoice frees its entries — see CreateInvoiceContent).
+    private func isBilled(_ entry: TimeEntry) -> Bool {
+        entry.invoice != nil && entry.invoice?.deletedDate == nil
+    }
+
+    /// Entries after applying the billing filter.
+    private var filteredEntries: [TimeEntry] {
+        switch billingFilter {
+        case .all:      return entries
+        case .unbilled: return entries.filter { !isBilled($0) }
+        case .billed:   return entries.filter { isBilled($0) }
+        }
+    }
+
+    // Week summary (always reflects all entries, regardless of the filter)
     private var weekEntries: [TimeEntry] {
         let start = Calendar.current.startOfWeek(for: .now)
         return entries.filter { $0.date >= start }
@@ -43,9 +74,25 @@ struct TimeTrackingView: View {
                     }
                 }
 
-                // Entries grouped by date
-                if !entries.isEmpty {
-                    let grouped = Dictionary(grouping: entries) {
+                // Active filter chip (only when filtering)
+                if billingFilter != .all && !entries.isEmpty {
+                    Section {
+                        HStack {
+                            Label("Showing \(billingFilter.menuLabel)", systemImage: "line.3.horizontal.decrease.circle.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.indigo)
+                            Spacer()
+                            Button("Clear") { billingFilter = .all }
+                                .font(.caption.weight(.semibold))
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+                    }
+                }
+
+                // Entries grouped by date (after the billing filter)
+                if !filteredEntries.isEmpty {
+                    let grouped = Dictionary(grouping: filteredEntries) {
                         Calendar.current.startOfDay(for: $0.date)
                     }
                     let sortedDays = grouped.keys.sorted(by: >)
@@ -72,6 +119,12 @@ struct TimeTrackingView: View {
                         systemImage: "clock",
                         description: Text("Tap + to log hours or start a timer.")
                     )
+                } else if filteredEntries.isEmpty {
+                    ContentUnavailableView(
+                        "No \(billingFilter.menuLabel) Entries",
+                        systemImage: "line.3.horizontal.decrease.circle",
+                        description: Text("Nothing matches this filter. Tap Clear or change it from the filter menu.")
+                    )
                 }
             }
             .navigationTitle("Time Tracking")
@@ -80,15 +133,33 @@ struct TimeTrackingView: View {
                     Button { showSettings = true } label: {
                         ProfileToolbarLabel()
                     }
+                    .accessibilityLabel("Profile & Settings")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("Show", selection: $billingFilter) {
+                            ForEach(TimeBillingFilter.allCases) { Text($0.menuLabel).tag($0) }
+                        }
+                    } label: {
+                        Image(systemName: billingFilter == .all
+                              ? "line.3.horizontal.decrease.circle"
+                              : "line.3.horizontal.decrease.circle.fill")
+                    }
+                    .disabled(entries.isEmpty)
+                    .accessibilityLabel("Filter Entries")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("History") { showHistory = true }
                         .disabled(entries.isEmpty)
                 }
-                ToolbarItem(placement: .primaryAction) {
+                // Break the iOS 26 Liquid Glass grouping so the view controls and +
+                // render as separate pills instead of one combined element.
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showLogTime = true } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityLabel("Log Time")
                 }
             }
             .sheet(isPresented: $showLogTime) {
@@ -112,10 +183,11 @@ struct TimeTrackingView: View {
                         Image(systemName: "play.fill")
                             .font(.title2.weight(.semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 58, height: 58)
+                            .frame(width: 55, height: 55)
                             .background(.indigo, in: Circle())
                             .shadow(color: .indigo.opacity(0.35), radius: 10, x: 0, y: 4)
                     }
+                    .accessibilityLabel("Start Timer")
                     .padding(.trailing, 20)
                     .padding(.bottom, 20)
                     .transition(.scale(scale: 0.8).combined(with: .opacity))
@@ -231,6 +303,7 @@ struct ActiveTimerCard: View {
                         .foregroundStyle(timerState.isRunning ? .orange : .green)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(timerState.isRunning ? "Pause Timer" : "Resume Timer")
             }
             .padding()
             .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))

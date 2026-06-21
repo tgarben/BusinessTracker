@@ -40,6 +40,11 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Entitlements.self) private var pro
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.openURL) private var openURL
+
+    // Automatic Mileage (Auto-Mileage, Phase 0). `DriveDetector.shared` is read
+    // directly in `body` — @Observable tracks the access for live updates.
+    @AppStorage("mileage_autoDetectEnabled") private var autoDetectEnabled = false
     @AppStorage("invoice_remindersEnabled") private var invoiceRemindersEnabled: Bool = false
     @AppStorage("notify_hour") private var notifyHour: Int = 9
     @AppStorage("notify_minute") private var notifyMinute: Int = 0
@@ -48,6 +53,7 @@ struct SettingsView: View {
     @AppStorage("user_primaryUse") private var primaryUse: String = "Mixed"
     @AppStorage("user_avatar") private var avatarData: Data = Data()
     @AppStorage("home_sectionOrder") private var sectionOrder: String = HomeSection.defaultOrderString
+    @AppStorage("home_sectionEnabled") private var sectionEnabled: String = HomeSection.defaultEnabledString
 
     @AppStorage("mileage_ratePerMile") private var mileageRate: Double = MileageTrip.defaultRatePerMile
     @AppStorage("default_hourlyRate") private var defaultHourlyRate: Double = 0
@@ -57,7 +63,6 @@ struct SettingsView: View {
     @AppStorage("tax_incomeBracketRate") private var incomeBracketRate: Double = 22.0
     @AppStorage("tax_businessStructure") private var businessStructure: String = "Sole Proprietor"
     @AppStorage("tax_remindersEnabled") private var taxRemindersEnabled: Bool = false
-    @AppStorage("expense_presetInstantSave") private var expensePresetInstantSave: Bool = false
 
     // Business information (used on invoices)
     @AppStorage("business_name") private var businessName: String = ""
@@ -71,12 +76,14 @@ struct SettingsView: View {
     @AppStorage("business_defaultPaymentTerms") private var defaultPaymentTerms: String = "Due Upon Receipt"
     @AppStorage("business_acceptedPayments") private var acceptedPayments: String = ""
     @AppStorage("business_paymentInstructions") private var paymentInstructions: String = ""
+    @AppStorage("business_paymentLink") private var paymentLink: String = ""
+    @AppStorage(AppCurrency.storageKey) private var currencyCode: String = "USD"
 
     @AppStorage("business_logo") private var logoData: Data = Data()
 
     // Document numbering
     @AppStorage("doc_invoicePrefix") private var invoicePrefix: String = "INV-"
-    @AppStorage("doc_quotePrefix") private var quotePrefix: String = "EST-"
+    @AppStorage("doc_quotePrefix") private var quotePrefix: String = "QUO-"
     @AppStorage("doc_numberResetYearly") private var numberResetYearly: Bool = false
 
     private let paymentTermsOptions = ["Due Upon Receipt", "Net 15", "Net 30", "Net 45", "Net 60"]
@@ -107,7 +114,10 @@ struct SettingsView: View {
         var set = Set(selectedFocuses)
         if set.contains(focus) { set.remove(focus) } else { set.insert(focus) }
         primaryUse = appFocusOptions.filter { set.contains($0) }.joined(separator: ",")
-        sectionOrder = HomeSection.orderString(forFocuses: primaryUse)
+        // App Focus curates which Home sections show + their order.
+        let curation = HomeSection.curation(forFocuses: primaryUse)
+        sectionOrder = curation.order
+        sectionEnabled = curation.enabled
     }
 
     @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }, sort: \TimeEntry.date, order: .reverse) private var timeEntries: [TimeEntry]
@@ -268,7 +278,7 @@ struct SettingsView: View {
             } header: {
                 Text("Logo")
             } footer: {
-                Text("Appears at the top of the invoices and estimates you generate. A transparent PNG looks best.")
+                Text("Appears at the top of the invoices and quotes you generate. A transparent PNG looks best.")
             }
 
             Section {
@@ -309,11 +319,12 @@ struct SettingsView: View {
                     Text("%").foregroundStyle(.secondary)
                 }
                 businessField("Accepted Payments", text: $acceptedPayments, icon: "creditcard.fill", color: .purple, axis: .vertical)
+                businessField("Pay-Online Link", text: $paymentLink, icon: "link", color: .purple, keyboard: .URL)
                 businessField("Payment Instructions", text: $paymentInstructions, icon: "text.bubble.fill", color: .purple, axis: .vertical)
             } header: {
                 Text("Invoicing Defaults")
             } footer: {
-                Text("Pre-filled into each new invoice. You can override them per invoice. Accepted payments e.g. \"Bank transfer, Check, Zelle\".")
+                Text("Pre-filled into each new invoice. You can override them per invoice. Accepted payments e.g. \"Bank transfer, Check, Zelle\". Pay-Online Link is your Stripe / PayPal.me / payment URL, printed on the invoice.")
             }
 
             Section {
@@ -330,9 +341,9 @@ struct SettingsView: View {
                 }
                 HStack(spacing: 10) {
                     SettingsIcon(symbol: "number", color: .teal)
-                    Text("Estimate Prefix")
+                    Text("Quote Prefix")
                     Spacer()
-                    TextField("EST-", text: $quotePrefix)
+                    TextField("QUO-", text: $quotePrefix)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 110)
                         .autocorrectionDisabled()
@@ -595,8 +606,7 @@ struct SettingsView: View {
                             Text("App Focus")
                         }
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 104), spacing: 8)],
-                            alignment: .leading,
+                            columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
                             spacing: 8
                         ) {
                             ForEach(appFocusOptions, id: \.self) { focus in
@@ -604,11 +614,13 @@ struct SettingsView: View {
                                 Button { toggleFocus(focus) } label: {
                                     Text(focus)
                                         .font(.subheadline.weight(.medium))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
                                         .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 8)
-                                        .background(selected ? Color.purple.opacity(0.18) : Color(.systemGray5), in: Capsule())
+                                        .padding(.vertical, 9)
+                                        .background(selected ? Color.purple.opacity(0.15) : Color(.systemGray6), in: Capsule())
                                         .foregroundStyle(selected ? .purple : .primary)
-                                        .overlay(Capsule().strokeBorder(selected ? Color.purple.opacity(0.45) : .clear, lineWidth: 1))
+                                        .overlay(Capsule().strokeBorder(selected ? Color.purple.opacity(0.5) : Color(.systemGray4), lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -642,7 +654,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Configuration")
                 } footer: {
-                    Text("Business details for your invoices & estimates, plus mileage, fuel, and tax settings used in Reports.")
+                    Text("Business details for your invoices & quotes, plus mileage, fuel, and tax settings used in Reports.")
                 }
 
                 // MARK: Presets & Quick-Fill
@@ -656,13 +668,17 @@ struct SettingsView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.tertiary)
                         }
+                        .contentShape(Rectangle())
                     }
+                    // Render like the NavigationLink rows below (a Button label
+                    // otherwise picks up the blue accent tint).
+                    .buttonStyle(.plain)
                     NavigationLink {
                         PurposePresetsEditor()
                     } label: {
                         HStack(spacing: 10) {
                             SettingsIcon(symbol: "car.fill", color: .blue)
-                            Text("Trip Purposes")
+                            Text("Trip Categories")
                         }
                     }
                     NavigationLink {
@@ -681,16 +697,46 @@ struct SettingsView: View {
                             Text("Expense Presets")
                         }
                     }
-                    Toggle(isOn: $expensePresetInstantSave) {
-                        HStack(spacing: 10) {
-                            SettingsIcon(symbol: "bolt.fill", color: .red)
-                            Text("Instant-Log Expense Presets")
-                        }
-                    }
                 } header: {
                     Text("Presets & Quick-Fill")
                 } footer: {
-                    Text("Quick-fill chips and saved templates for logging trips and expenses faster. With Instant-Log on, tapping an expense preset in the Expenses + menu saves it immediately (presets with a fixed amount); others still open the form.")
+                    Text("Quick-fill chips and saved templates for logging trips and expenses faster. Turn on Instant-Log on an individual expense preset (in Expense Presets) to log it immediately from the Expenses + menu.")
+                }
+
+                // MARK: Automatic Mileage (Beta)
+                Section {
+                    Toggle(isOn: $autoDetectEnabled) {
+                        HStack(spacing: 10) {
+                            SettingsIcon(symbol: "car.circle.fill", color: .blue)
+                            HStack(spacing: 6) {
+                                Text("Automatic Mileage")
+                                Text("BETA")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(.orange, in: Capsule())
+                            }
+                        }
+                    }
+                    .onChange(of: autoDetectEnabled) { _, on in
+                        DriveDetector.shared.setEnabled(on)
+                    }
+
+                    if DriveDetector.shared.needsAlwaysPermission {
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                        } label: {
+                            Label("Set Location access to \u{201C}Always\u{201D} to enable background detection.",
+                                  systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                } header: {
+                    Text("Automatic Mileage")
+                } footer: {
+                    Text("Beta — detects and logs your drives automatically in the background so you don't have to start a trip. Requires \u{201C}Always\u{201D} location access; turn off anytime. Auto-logged drives appear in Mileage for you to review and categorize.")
                 }
 
                 // MARK: Data Export
@@ -808,11 +854,18 @@ struct SettingsView: View {
 
                 // MARK: App
                 Section("App") {
-                    HStack(spacing: 10) {
-                        SettingsIcon(symbol: "dollarsign", color: .gray)
-                        Text("Currency")
-                        Spacer()
-                        Text("USD").foregroundStyle(.secondary)
+                    LabeledContent {
+                        Picker("", selection: $currencyCode) {
+                            ForEach(AppCurrency.supported, id: \.self) { code in
+                                Text(AppCurrency.displayName(code)).tag(code)
+                            }
+                        }
+                        .labelsHidden()
+                    } label: {
+                        HStack(spacing: 10) {
+                            SettingsIcon(symbol: "dollarsign", color: .gray)
+                            Text("Currency")
+                        }
                     }
 
                     HStack(spacing: 10) {
@@ -851,8 +904,12 @@ struct SettingsView: View {
                 }
             }
             .sheet(item: $exportItem) { item in
-                ShareSheet(activityItems: [item.url])
-                    .ignoresSafeArea()
+                if item.preview {
+                    CSVPreviewView(url: item.url, title: item.title)
+                } else {
+                    ShareSheet(activityItems: [item.url])
+                        .ignoresSafeArea()
+                }
             }
             .sheet(isPresented: $showTimePresets) {
                 PresetsView()
@@ -1039,7 +1096,7 @@ struct SettingsView: View {
     private func exportButton(_ title: String, icon: String, color: Color, scope: ExportScope) -> some View {
         Button {
             if pro.isProEffective {
-                exportItem = ExportItem(csv: buildCSV(scope))
+                exportItem = ExportItem(csv: buildCSV(scope), title: title, preview: true)
             } else {
                 paywall = .dataExport
             }
@@ -1146,7 +1203,58 @@ struct SettingsView: View {
 private struct ExportItem: Identifiable {
     let id = UUID()
     let url: URL
-    init(csv url: URL) { self.url = url }
+    var title: String
+    /// When true, the export is shown in `CSVPreviewView` first (with its own
+    /// Share button) rather than going straight to the system share sheet.
+    var preview: Bool
+    init(csv url: URL, title: String = "", preview: Bool = false) {
+        self.url = url
+        self.title = title
+        self.preview = preview
+    }
+}
+
+/// A scrollable, read-only preview of a generated CSV with a Share button —
+/// mirrors the invoice/estimate `DocumentPreviewView` so the user can eyeball an
+/// export before sending it.
+private struct CSVPreviewView: View {
+    let url: URL
+    let title: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String = ""
+    @State private var shareItem: SharePDF?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView([.vertical, .horizontal]) {
+                Text(text.isEmpty ? "No data in this range." : text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .navigationTitle(title.isEmpty ? "Preview" : title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { shareItem = SharePDF(url: url) } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("Share")
+                }
+            }
+            .sheet(item: $shareItem) { item in
+                ActivityShareSheet(items: [item.url])
+            }
+            .task {
+                text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            }
+        }
+    }
 }
 
 private struct ShareSheet: UIViewControllerRepresentable {

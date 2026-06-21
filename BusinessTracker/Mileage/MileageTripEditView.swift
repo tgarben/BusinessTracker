@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import MapKit
 
 private enum MileageEditMode: String, CaseIterable {
     case manual  = "Manual"
@@ -76,9 +77,20 @@ struct MileageTripEditView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Captured GPS route (auto-detected drives, Phase 2)
+                if !trip.routeCoordinates.isEmpty {
+                    Section {
+                        TrackedRouteMap(coordinates: trip.routeCoordinates)
+                            .frame(height: 200)
+                            .listRowInsets(EdgeInsets())
+                    } header: {
+                        Label("Tracked Route", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    }
+                }
+
                 Section("Trip Details") {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
-                    TextField("Purpose", text: $purpose)
+                    TextField("Category", text: $purpose)
                     PurposeChipsRow(purpose: $purpose)
                 }
 
@@ -166,8 +178,8 @@ struct MileageTripEditView: View {
 
     @ViewBuilder
     private var manualFields: some View {
-        TextField("Start location", text: $manualStart)
-        TextField("End location", text: $manualEnd)
+        TextField("Start Location", text: $manualStart)
+        TextField("End Location", text: $manualEnd)
         LabeledContent("Miles") {
             TextField("0.0", value: $manualMiles, format: .number.precision(.fractionLength(2)))
                 .multilineTextAlignment(.trailing)
@@ -270,5 +282,40 @@ struct MileageTripEditView: View {
         trip.miles = editMode == .address ? totalMiles : manualMiles
         trip.notes = notes
         dismiss()
+    }
+}
+
+// MARK: - Tracked route map (auto-detected drives)
+
+/// A static (non-interactive) map preview of a captured GPS route with start/end pins.
+private struct TrackedRouteMap: View {
+    let coordinates: [CLLocationCoordinate2D]
+
+    var body: some View {
+        Map(initialPosition: .region(region)) {
+            MapPolyline(coordinates: coordinates)
+                .stroke(.blue, lineWidth: 4)
+            if let start = coordinates.first {
+                Marker("Start", systemImage: "flag.fill", coordinate: start).tint(.green)
+            }
+            if let end = coordinates.last {
+                Marker("End", systemImage: "flag.checkered", coordinate: end).tint(.red)
+            }
+        }
+        .allowsHitTesting(false)   // a thumbnail inside the form — don't steal scroll gestures
+    }
+
+    private var region: MKCoordinateRegion {
+        let lats = coordinates.map(\.latitude)
+        let lons = coordinates.map(\.longitude)
+        guard let minLat = lats.min(), let maxLat = lats.max(),
+              let minLon = lons.min(), let maxLon = lons.max() else {
+            return MKCoordinateRegion()
+        }
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2,
+                                            longitude: (minLon + maxLon) / 2)
+        let span = MKCoordinateSpan(latitudeDelta: max(0.005, (maxLat - minLat) * 1.4),
+                                    longitudeDelta: max(0.005, (maxLon - minLon) * 1.4))
+        return MKCoordinateRegion(center: center, span: span)
     }
 }

@@ -45,13 +45,13 @@ enum DataBackup {
     struct MileageTripDTO: Codable { var id: UUID; var date = Date.now; var startLocation = ""; var endLocation = ""; var miles = 0.0; var purpose = ""; var notes = ""; var waypoints: [String] = []; var startAddress = ""; var endAddress = ""; var deletedDate: Date? }
     struct ExpenseDTO: Codable { var id: UUID; var date = Date.now; var amount = 0.0; var category = ""; var notes = ""; var receiptImageData: Data?; var receiptImagesData: [Data] = []; var deletedDate: Date?; var clientId: UUID? }
     struct IncomeEntryDTO: Codable { var id: UUID; var date = Date.now; var source = ""; var amount = 0.0; var notes = ""; var deletedDate: Date?; var clientId: UUID? }
-    struct InvoiceDTO: Codable { var id: UUID; var invoiceNumber = 0; var issueDate = Date.now; var dueDate = Date.now; var notes = ""; var isPaid = false; var paidDate: Date?; var additionalAmount = 0.0; var additionalDescription = ""; var deletedDate: Date?; var discountAmount = 0.0; var taxRate = 0.0; var paymentTerms = ""; var paymentInstructions = ""; var acceptedPayments = ""; var poNumber = ""; var clientId: UUID? }
+    struct InvoiceDTO: Codable { var id: UUID; var invoiceNumber = 0; var issueDate = Date.now; var dueDate = Date.now; var notes = ""; var isPaid = false; var paidDate: Date?; var additionalAmount = 0.0; var additionalDescription = ""; var deletedDate: Date?; var discountAmount = 0.0; var discountIsPercent = false; var taxRate = 0.0; var paymentTerms = ""; var paymentInstructions = ""; var acceptedPayments = ""; var poNumber = ""; var clientId: UUID? }
     struct InvoiceLineItemDTO: Codable { var id: UUID; var itemDescription = ""; var quantity = 1.0; var unitPrice = 0.0; var sortOrder = 0; var invoiceId: UUID? }
-    struct QuoteDTO: Codable { var id: UUID; var quoteNumber = 0; var issueDate = Date.now; var validUntil = Date.now; var notes = ""; var status = "Draft"; var convertedInvoiceNumber = 0; var deletedDate: Date?; var discountAmount = 0.0; var taxRate = 0.0; var paymentTerms = ""; var paymentInstructions = ""; var acceptedPayments = ""; var poNumber = ""; var clientId: UUID? }
+    struct QuoteDTO: Codable { var id: UUID; var quoteNumber = 0; var issueDate = Date.now; var validUntil = Date.now; var notes = ""; var status = "Draft"; var convertedInvoiceNumber = 0; var deletedDate: Date?; var discountAmount = 0.0; var discountIsPercent = false; var taxRate = 0.0; var paymentTerms = ""; var paymentInstructions = ""; var acceptedPayments = ""; var poNumber = ""; var clientId: UUID? }
     struct QuoteLineItemDTO: Codable { var id: UUID; var itemDescription = ""; var quantity = 1.0; var unitPrice = 0.0; var sortOrder = 0; var quoteId: UUID? }
     struct TimePresetDTO: Codable { var id: UUID; var name = ""; var sortOrder = 0; var hourlyRateOverride: Double?; var notesTemplate = ""; var clientId: UUID?; var projectId: UUID? }
     struct MileagePresetDTO: Codable { var id: UUID; var name = ""; var startLocation = ""; var endLocation = ""; var purpose = ""; var notes = ""; var sortOrder = 0 }
-    struct ExpensePresetDTO: Codable { var id: UUID; var name = ""; var amount: Double?; var category = ""; var notes = ""; var sortOrder = 0 }
+    struct ExpensePresetDTO: Codable { var id: UUID; var name = ""; var amount: Double?; var category = ""; var notes = ""; var sortOrder = 0; var instantLog = false }
 
     struct BackupFile: Codable {
         var version = DataBackup.fileVersion
@@ -123,13 +123,13 @@ enum DataBackup {
         file.mileageTrips = trips.map { MileageTripDTO(id: selfID($0), date: $0.date, startLocation: $0.startLocation, endLocation: $0.endLocation, miles: $0.miles, purpose: $0.purpose, notes: $0.notes, waypoints: $0.waypoints, startAddress: $0.startAddress, endAddress: $0.endAddress, deletedDate: $0.deletedDate) }
         file.expenses = expenses.map { ExpenseDTO(id: selfID($0), date: $0.date, amount: $0.amount, category: $0.category, notes: $0.notes, receiptImageData: $0.receiptImageData, receiptImagesData: $0.receiptImagesData, deletedDate: $0.deletedDate, clientId: ref($0.client)) }
         file.incomeEntries = income.map { IncomeEntryDTO(id: selfID($0), date: $0.date, source: $0.source, amount: $0.amount, notes: $0.notes, deletedDate: $0.deletedDate, clientId: ref($0.client)) }
-        file.invoices = invoices.map { InvoiceDTO(id: selfID($0), invoiceNumber: $0.invoiceNumber, issueDate: $0.issueDate, dueDate: $0.dueDate, notes: $0.notes, isPaid: $0.isPaid, paidDate: $0.paidDate, additionalAmount: $0.additionalAmount, additionalDescription: $0.additionalDescription, deletedDate: $0.deletedDate, discountAmount: $0.discountAmount, taxRate: $0.taxRate, paymentTerms: $0.paymentTerms, paymentInstructions: $0.paymentInstructions, acceptedPayments: $0.acceptedPayments, poNumber: $0.poNumber, clientId: ref($0.client)) }
+        file.invoices = invoices.map { InvoiceDTO(id: selfID($0), invoiceNumber: $0.invoiceNumber, issueDate: $0.issueDate, dueDate: $0.dueDate, notes: $0.notes, isPaid: $0.isPaid, paidDate: $0.paidDate, additionalAmount: $0.additionalAmount, additionalDescription: $0.additionalDescription, deletedDate: $0.deletedDate, discountAmount: $0.discountAmount, discountIsPercent: $0.discountIsPercent, taxRate: $0.taxRate, paymentTerms: $0.paymentTerms, paymentInstructions: $0.paymentInstructions, acceptedPayments: $0.acceptedPayments, poNumber: $0.poNumber, clientId: ref($0.client)) }
         file.invoiceLineItems = invoiceItems.map { InvoiceLineItemDTO(id: selfID($0), itemDescription: $0.itemDescription, quantity: $0.quantity, unitPrice: $0.unitPrice, sortOrder: $0.sortOrder, invoiceId: ref($0.invoice)) }
-        file.quotes = quotes.map { QuoteDTO(id: selfID($0), quoteNumber: $0.quoteNumber, issueDate: $0.issueDate, validUntil: $0.validUntil, notes: $0.notes, status: $0.status, convertedInvoiceNumber: $0.convertedInvoiceNumber, deletedDate: $0.deletedDate, discountAmount: $0.discountAmount, taxRate: $0.taxRate, paymentTerms: $0.paymentTerms, paymentInstructions: $0.paymentInstructions, acceptedPayments: $0.acceptedPayments, poNumber: $0.poNumber, clientId: ref($0.client)) }
+        file.quotes = quotes.map { QuoteDTO(id: selfID($0), quoteNumber: $0.quoteNumber, issueDate: $0.issueDate, validUntil: $0.validUntil, notes: $0.notes, status: $0.status, convertedInvoiceNumber: $0.convertedInvoiceNumber, deletedDate: $0.deletedDate, discountAmount: $0.discountAmount, discountIsPercent: $0.discountIsPercent, taxRate: $0.taxRate, paymentTerms: $0.paymentTerms, paymentInstructions: $0.paymentInstructions, acceptedPayments: $0.acceptedPayments, poNumber: $0.poNumber, clientId: ref($0.client)) }
         file.quoteLineItems = quoteItems.map { QuoteLineItemDTO(id: selfID($0), itemDescription: $0.itemDescription, quantity: $0.quantity, unitPrice: $0.unitPrice, sortOrder: $0.sortOrder, quoteId: ref($0.quote)) }
         file.timePresets = timePresets.map { TimePresetDTO(id: selfID($0), name: $0.name, sortOrder: $0.sortOrder, hourlyRateOverride: $0.hourlyRateOverride, notesTemplate: $0.notesTemplate, clientId: ref($0.client), projectId: ref($0.project)) }
         file.mileagePresets = mileagePresets.map { MileagePresetDTO(id: selfID($0), name: $0.name, startLocation: $0.startLocation, endLocation: $0.endLocation, purpose: $0.purpose, notes: $0.notes, sortOrder: $0.sortOrder) }
-        file.expensePresets = expensePresets.map { ExpensePresetDTO(id: selfID($0), name: $0.name, amount: $0.amount, category: $0.category, notes: $0.notes, sortOrder: $0.sortOrder) }
+        file.expensePresets = expensePresets.map { ExpensePresetDTO(id: selfID($0), name: $0.name, amount: $0.amount, category: $0.category, notes: $0.notes, sortOrder: $0.sortOrder, instantLog: $0.instantLog) }
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -192,7 +192,7 @@ enum DataBackup {
             let inv = Invoice(invoiceNumber: dto.invoiceNumber, issueDate: dto.issueDate, dueDate: dto.dueDate, client: dto.clientId.flatMap { clientByID[$0] }, notes: dto.notes)
             inv.isPaid = dto.isPaid; inv.paidDate = dto.paidDate
             inv.additionalAmount = dto.additionalAmount; inv.additionalDescription = dto.additionalDescription
-            inv.deletedDate = dto.deletedDate; inv.discountAmount = dto.discountAmount; inv.taxRate = dto.taxRate
+            inv.deletedDate = dto.deletedDate; inv.discountAmount = dto.discountAmount; inv.discountIsPercent = dto.discountIsPercent; inv.taxRate = dto.taxRate
             inv.paymentTerms = dto.paymentTerms; inv.paymentInstructions = dto.paymentInstructions
             inv.acceptedPayments = dto.acceptedPayments; inv.poNumber = dto.poNumber
             context.insert(inv); invoiceByID[dto.id] = inv; count += 1
@@ -200,7 +200,7 @@ enum DataBackup {
         for dto in file.quotes {
             let q = Quote(quoteNumber: dto.quoteNumber, issueDate: dto.issueDate, validUntil: dto.validUntil, client: dto.clientId.flatMap { clientByID[$0] }, notes: dto.notes)
             q.status = dto.status; q.convertedInvoiceNumber = dto.convertedInvoiceNumber; q.deletedDate = dto.deletedDate
-            q.discountAmount = dto.discountAmount; q.taxRate = dto.taxRate
+            q.discountAmount = dto.discountAmount; q.discountIsPercent = dto.discountIsPercent; q.taxRate = dto.taxRate
             q.paymentTerms = dto.paymentTerms; q.paymentInstructions = dto.paymentInstructions
             q.acceptedPayments = dto.acceptedPayments; q.poNumber = dto.poNumber
             context.insert(q); quoteByID[dto.id] = q; count += 1
@@ -246,7 +246,7 @@ enum DataBackup {
             context.insert(p); count += 1
         }
         for dto in file.expensePresets {
-            let p = ExpensePreset(name: dto.name, amount: dto.amount, category: dto.category, notes: dto.notes, sortOrder: dto.sortOrder)
+            let p = ExpensePreset(name: dto.name, amount: dto.amount, category: dto.category, notes: dto.notes, sortOrder: dto.sortOrder, instantLog: dto.instantLog)
             context.insert(p); count += 1
         }
 

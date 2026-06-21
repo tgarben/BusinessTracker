@@ -84,7 +84,7 @@ struct LogTripView: View {
             Form {
                 Section("Trip Details") {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
-                    TextField("Purpose (e.g. Client visit)", text: $purpose)
+                    TextField("Category (e.g. Client visit)", text: $purpose)
                     PurposeChipsRow(purpose: $purpose)
                 }
 
@@ -287,8 +287,8 @@ struct LogTripView: View {
 
     @ViewBuilder
     private var manualFields: some View {
-        TextField("Start location", text: $manualStartLocation)
-        TextField("End location", text: $manualEndLocation)
+        TextField("Start Location", text: $manualStartLocation)
+        TextField("End Location", text: $manualEndLocation)
         LabeledContent("Miles (one way)") {
             TextField("0.0", value: $manualMiles, format: .number)
                 .multilineTextAlignment(.trailing)

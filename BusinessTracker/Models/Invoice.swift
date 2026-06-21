@@ -14,7 +14,8 @@ final class Invoice: SoftDeletable {
     var deletedDate: Date? = nil
 
     // Totals adjustments
-    var discountAmount: Double = 0            // flat discount applied before tax
+    var discountAmount: Double = 0            // discount applied before tax — a flat $ amount, or a percent when `discountIsPercent`
+    var discountIsPercent: Bool = false       // when true, `discountAmount` is a percent of the subtotal
     var taxRate: Double = 0                   // sales tax percent applied to discounted subtotal
 
     // Payment & terms
@@ -32,6 +33,16 @@ final class Invoice: SoftDeletable {
     var lineItems: [InvoiceLineItem]? = nil
 
     var formattedNumber: String { Invoice.formatted(number: invoiceNumber, issueDate: issueDate) }
+
+    /// Share filename (no extension), e.g. `2026_06_19_ClancyBros_INV_001`.
+    var shareFileName: String {
+        DocumentNaming.fileName(date: issueDate, clientName: client?.name, number: formattedNumber)
+    }
+
+    /// In-app label that includes the client name, e.g. `INV-001 · Clancy Bros`.
+    var displayTitle: String {
+        DocumentNaming.displayTitle(clientName: client?.name, number: formattedNumber)
+    }
 
     /// Formats a document number using the user's configurable prefix
     /// (`doc_invoicePrefix`, default "INV-") and optional per-year reset
@@ -55,7 +66,9 @@ final class Invoice: SoftDeletable {
         return timeTotal + itemsTotal + additionalAmount
     }
 
-    var discountedSubtotal: Double { max(0, subtotal - discountAmount) }
+    /// The discount as an actual dollar figure (resolves the percent case).
+    var effectiveDiscount: Double { discountIsPercent ? subtotal * (discountAmount / 100) : discountAmount }
+    var discountedSubtotal: Double { max(0, subtotal - effectiveDiscount) }
     var taxAmount: Double { discountedSubtotal * (taxRate / 100) }
 
     /// Final amount due.

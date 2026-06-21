@@ -78,11 +78,11 @@ struct AddEditMileagePresetView: View {
                     TextField("e.g. Home → Main Office", text: $name)
                 }
                 Section("Route") {
-                    TextField("Start location", text: $startLocation)
-                    TextField("End location", text: $endLocation)
+                    SearchableAddressRow(placeholder: "Start Location", text: $startLocation)
+                    SearchableAddressRow(placeholder: "End Location", text: $endLocation)
                 }
                 Section("Defaults") {
-                    TextField("Purpose", text: $purpose)
+                    TextField("Category", text: $purpose)
                     PurposeChipsRow(purpose: $purpose)
                     TextField("Notes", text: $notes, axis: .vertical).lineLimit(2...4)
                 }
@@ -124,5 +124,38 @@ struct AddEditMileagePresetView: View {
             ))
         }
         dismiss()
+    }
+}
+
+// MARK: - Single-line searchable address field
+
+/// An editable text field with a 🔍 button that opens the shared MapKit
+/// autocomplete (`AddressSearchView`) and fills the field with the chosen
+/// address. Used for mileage-preset endpoints, which are later geocoded when the
+/// preset is applied in `LogTripView`.
+struct SearchableAddressRow: View {
+    let placeholder: String
+    @Binding var text: String
+    @State private var showSearch = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField(placeholder, text: $text, axis: .vertical)
+                .lineLimit(1...2)
+            Button { showSearch = true } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .sheet(isPresented: $showSearch) {
+            AddressSearchView(title: placeholder) { result in
+                switch result {
+                case .completion(let completion): text = fullAddress(completion)
+                case .coordinate(_, let label):   text = label
+                }
+            }
+        }
     }
 }

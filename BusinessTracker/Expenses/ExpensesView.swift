@@ -6,8 +6,6 @@ struct ExpensesView: View {
     @Query(sort: \ExpensePreset.sortOrder) private var presets: [ExpensePreset]
     @Environment(\.modelContext) private var modelContext
 
-    @AppStorage("expense_presetInstantSave") private var instantSave: Bool = false
-
     @State private var showAddExpense = false
     @State private var showHistory = false
     @State private var showSettings = false
@@ -80,6 +78,7 @@ struct ExpensesView: View {
                     Button { showSettings = true } label: {
                         ProfileToolbarLabel()
                     }
+                    .accessibilityLabel("Profile & Settings")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("History") { showHistory = true }
@@ -162,11 +161,12 @@ struct ExpensesView: View {
                     Image(systemName: "plus")
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 58, height: 58)
+                        .frame(width: 55, height: 55)
                         .background(.red, in: Circle())
                         .rotationEffect(.degrees(fabExpanded ? 45 : 0))
                         .shadow(color: .red.opacity(0.35), radius: 10, x: 0, y: 4)
                 }
+                .accessibilityLabel(fabExpanded ? "Close Menu" : "Add Expense")
             }
             .padding(.trailing, 20)
             .padding(.bottom, 20)
@@ -204,7 +204,7 @@ struct ExpensesView: View {
 
     private func selectPreset(_ preset: ExpensePreset) {
         collapseFAB()
-        if instantSave, let amount = preset.amount, amount > 0 {
+        if preset.instantLog, let amount = preset.amount, amount > 0 {
             let expense = Expense(
                 date: .now,
                 amount: amount,

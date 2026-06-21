@@ -8,5 +8,6 @@ struct FreelancedWidgetBundle: WidgetBundle {
         FreelancedMediumWidget()
         FreelancedTaxWidget()
         FreelancedLiveActivity()
+        TripLiveActivity()
     }
 }

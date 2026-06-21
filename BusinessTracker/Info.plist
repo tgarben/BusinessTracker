@@ -9,7 +9,12 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>location</string>
 	</array>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Freelanced uses your location in the background to automatically detect and log your business drives, so you don't have to start a trip manually. You can turn Automatic Mileage off anytime in Settings.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Freelanced uses motion activity to tell driving apart from walking, so Automatic Mileage only logs your drives.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

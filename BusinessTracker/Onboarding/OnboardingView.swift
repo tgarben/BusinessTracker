@@ -49,20 +49,33 @@ private let onboardingIndigo = Color.indigo
 
 /// App-icon-style rounded badge with a white glyph.
 private struct OnboardingBadge: View {
-    let icon: String
+    var icon: String? = nil
+    /// When set, renders this asset image as the whole badge (used for the app
+    /// logo on the Welcome page); otherwise draws the gradient tile + SF Symbol.
+    var imageName: String? = nil
     var color: Color = onboardingIndigo
     var size: CGFloat = 96
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-            .fill(color.gradient)
-            .frame(width: size, height: size)
-            .overlay(
-                Image(systemName: icon)
-                    .font(.system(size: size * 0.42, weight: .semibold))
-                    .foregroundStyle(.white)
-            )
-            .shadow(color: color.opacity(0.3), radius: 14, x: 0, y: 8)
+        Group {
+            if let imageName {
+                Image(imageName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.26, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
+                    .fill(color.gradient)
+                    .frame(width: size, height: size)
+                    .overlay(
+                        Image(systemName: icon ?? "app.fill")
+                            .font(.system(size: size * 0.42, weight: .semibold))
+                            .foregroundStyle(.white)
+                    )
+            }
+        }
+        .shadow(color: color.opacity(0.3), radius: 14, x: 0, y: 8)
     }
 }
 
@@ -182,7 +195,7 @@ private struct WelcomePage: View {
     var body: some View {
         OnboardingScaffold(page: page, total: total, primaryLabel: "Get Started", onPrimary: onNext) {
             VStack(spacing: 0) {
-                OnboardingBadge(icon: "stopwatch.fill", size: 92)
+                OnboardingBadge(imageName: "freelancedLogo", size: 92)
                     .padding(.top, 12)
                     .padding(.bottom, 24)
 
@@ -244,6 +257,7 @@ private struct AboutYouPage: View {
     @AppStorage("user_lastName") private var storedLastName: String = ""
     @AppStorage("user_avatar") private var avatarData: Data = Data()
     @AppStorage("home_sectionOrder") private var sectionOrder: String = HomeSection.defaultOrderString
+    @AppStorage("home_sectionEnabled") private var sectionEnabled: String = HomeSection.defaultEnabledString
     @AppStorage("user_primaryUse") private var primaryUse: String = ""
 
     @State private var name: String = ""
@@ -435,7 +449,9 @@ private struct AboutYouPage: View {
         storedLastName = lastName.trimmingCharacters(in: .whitespaces)
         let ordered = focusOptions.filter { focuses.contains($0) }
         primaryUse = ordered.joined(separator: ",")
-        sectionOrder = HomeSection.orderString(forFocuses: primaryUse)
+        let curation = HomeSection.curation(forFocuses: primaryUse)
+        sectionOrder = curation.order
+        sectionEnabled = curation.enabled
         focusedField = nil
         onNext()
     }

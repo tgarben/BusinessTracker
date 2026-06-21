@@ -29,6 +29,11 @@ struct ExpensePresetsView: View {
                                 Text(preset.category).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
+                            if preset.instantLog {
+                                Image(systemName: "bolt.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            }
                             if let amount = preset.amount {
                                 Text(amount.asCurrency)
                                     .font(.caption.weight(.semibold))
@@ -73,6 +78,7 @@ struct AddEditExpensePresetView: View {
     @State private var useAmount = false
     @State private var amountText = ""
     @State private var notes = ""
+    @State private var instantLog = false
 
     private var isEditing: Bool { preset != nil }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -116,6 +122,13 @@ struct AddEditExpensePresetView: View {
                          ? "This amount pre-fills when you use the preset (still editable)."
                          : "Leave off for expenses where the amount varies each time.")
                 }
+                if useAmount {
+                    Section {
+                        Toggle("Instant-Log", isOn: $instantLog)
+                    } footer: {
+                        Text("When on, tapping this preset in the Expenses + menu logs it immediately without opening the form.")
+                    }
+                }
                 Section("Notes") {
                     TextField("Optional notes", text: $notes, axis: .vertical).lineLimit(2...4)
                 }
@@ -138,6 +151,7 @@ struct AddEditExpensePresetView: View {
         name = preset.name
         category = preset.category.isEmpty ? Expense.categories[0] : preset.category
         notes = preset.notes
+        instantLog = preset.instantLog
         if let amount = preset.amount {
             useAmount = true
             amountText = String(format: "%.2f", amount)
@@ -147,14 +161,18 @@ struct AddEditExpensePresetView: View {
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         let amount: Double? = useAmount ? (Double(amountText) ?? 0) : nil
+        // Instant-log only applies to fixed-amount presets.
+        let instant = useAmount && instantLog
         if let preset {
             preset.name = trimmed
             preset.category = category
             preset.amount = amount
             preset.notes = notes
+            preset.instantLog = instant
         } else {
             modelContext.insert(ExpensePreset(
-                name: trimmed, amount: amount, category: category, notes: notes, sortOrder: existing.count
+                name: trimmed, amount: amount, category: category, notes: notes,
+                sortOrder: existing.count, instantLog: instant
             ))
         }
         dismiss()

@@ -54,6 +54,7 @@ final class Quote: SoftDeletable {
 
     // Totals adjustments (mirror Invoice)
     var discountAmount: Double = 0
+    var discountIsPercent: Bool = false       // when true, `discountAmount` is a percent of the subtotal
     var taxRate: Double = 0
 
     // Terms (carried over to the invoice on conversion)
@@ -69,13 +70,23 @@ final class Quote: SoftDeletable {
 
     var formattedNumber: String { Quote.formatted(number: quoteNumber, issueDate: issueDate) }
 
-    /// Formats an estimate number using the user's configurable prefix
-    /// (`doc_quotePrefix`, default "EST-") and optional per-year reset
-    /// (`doc_numberResetYearly`, which inserts the year, e.g. "EST-2026-001").
+    /// Share filename (no extension), e.g. `2026_06_19_ClancyBros_QUO_001`.
+    var shareFileName: String {
+        DocumentNaming.fileName(date: issueDate, clientName: client?.name, number: formattedNumber)
+    }
+
+    /// In-app label that includes the client name, e.g. `QUO-001 · Clancy Bros`.
+    var displayTitle: String {
+        DocumentNaming.displayTitle(clientName: client?.name, number: formattedNumber)
+    }
+
+    /// Formats a quote number using the user's configurable prefix
+    /// (`doc_quotePrefix`, default "QUO-") and optional per-year reset
+    /// (`doc_numberResetYearly`, which inserts the year, e.g. "QUO-2026-001").
     static func formatted(number: Int, issueDate: Date) -> String {
         let d = UserDefaults.standard
         let prefix = (d.string(forKey: "doc_quotePrefix")?.isEmpty == false)
-            ? d.string(forKey: "doc_quotePrefix")! : "EST-"
+            ? d.string(forKey: "doc_quotePrefix")! : "QUO-"
         let padded = String(format: "%03d", number)
         if d.bool(forKey: "doc_numberResetYearly") {
             let year = Calendar.current.component(.year, from: issueDate)
@@ -89,7 +100,9 @@ final class Quote: SoftDeletable {
         (lineItems ?? []).reduce(0.0) { $0 + $1.lineTotal }
     }
 
-    var discountedSubtotal: Double { max(0, subtotal - discountAmount) }
+    /// The discount as an actual dollar figure (resolves the percent case).
+    var effectiveDiscount: Double { discountIsPercent ? subtotal * (discountAmount / 100) : discountAmount }
+    var discountedSubtotal: Double { max(0, subtotal - effectiveDiscount) }
     var taxAmount: Double { discountedSubtotal * (taxRate / 100) }
 
     /// Final quoted total.

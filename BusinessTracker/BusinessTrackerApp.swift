@@ -68,6 +68,9 @@ struct BusinessTrackerApp: App {
                         await entitlements.refresh()
                         await TaxReminders.reschedule()
                         await InvoiceReminders.reschedule(container: Self.sharedModelContainer)
+                        DriveDetector.shared.modelContainer = Self.sharedModelContainer
+                        DriveDetector.shared.refreshFromSettings()
+                        TripTracker.shared.modelContainer = Self.sharedModelContainer
                     }
                     .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                         timerState.syncFromSharedStore()
@@ -76,6 +79,7 @@ struct BusinessTrackerApp: App {
                         Self.purgeExpiredTrash()
                         Task { await entitlements.refresh() }
                         Task { await InvoiceReminders.reschedule(container: Self.sharedModelContainer) }
+                        DriveDetector.shared.refreshFromSettings()
                     }
             } else {
                 OnboardingView()
