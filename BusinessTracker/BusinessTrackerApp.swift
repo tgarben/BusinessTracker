@@ -12,6 +12,9 @@ struct BusinessTrackerApp: App {
     /// fallback). Read by the Settings → iCloud Sync status so a silent fallback
     /// is visible to the user.
     static private(set) var cloudKitEnabled = false
+    /// If CloudKit init fell back to the local store, the underlying error (for the
+    /// in-app iCloud Sync diagnostic — readable on TestFlight where there's no console).
+    static private(set) var cloudKitInitError: String?
 
     private static let sharedModelContainer: ModelContainer = {
         // ⚠️ DATA-SAFETY GUARDRAIL — see "Schema changes & data safety" in CLAUDE.md.
@@ -44,9 +47,11 @@ struct BusinessTrackerApp: App {
             )
             let container = try ModelContainer(for: schema, configurations: [config])
             cloudKitEnabled = true
+            print("✅ CloudKit ModelContainer active (private DB). New @Model fields will register in the CloudKit Development schema after a record syncs.")
             return container
         } catch {
-            print("⚠️ CloudKit ModelContainer failed, falling back to local store: \(error)")
+            print("⚠️ CloudKit ModelContainer FAILED — using LOCAL store, nothing syncs to iCloud. Error: \(error)")
+            cloudKitInitError = String(describing: error)
             cloudKitEnabled = false
             return try! ModelContainer(for: schema, configurations: [
                 ModelConfiguration(schema: schema, cloudKitDatabase: .none)

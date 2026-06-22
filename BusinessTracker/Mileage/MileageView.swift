@@ -53,26 +53,49 @@ struct MileageView: View {
                 if !reviewTrips.isEmpty {
                     Section {
                         ForEach(reviewTrips) { trip in
-                            TripRow(trip: trip)
-                                .contentShape(Rectangle())
-                                .onTapGesture { editingTrip = trip }
-                                .swipeActions(edge: .leading) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                TripRow(trip: trip)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { editingTrip = trip }
+                                HStack(spacing: 10) {
                                     Button { markReviewed(trip) } label: {
-                                        Label("Confirm", systemImage: "checkmark")
+                                        Label("Confirm", systemImage: "checkmark.circle.fill")
+                                            .font(.caption.weight(.semibold))
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 7)
+                                            .background(.green.opacity(0.15), in: Capsule())
+                                            .foregroundStyle(.green)
                                     }
-                                    .tint(.green)
-                                }
-                                .swipeActions(edge: .trailing) {
+                                    .buttonStyle(.borderless)
+
+                                    Button { editingTrip = trip } label: {
+                                        Label("Categorize", systemImage: "tag.fill")
+                                            .font(.caption.weight(.semibold))
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 7)
+                                            .background(.blue.opacity(0.12), in: Capsule())
+                                            .foregroundStyle(.blue)
+                                    }
+                                    .buttonStyle(.borderless)
+
                                     Button(role: .destructive) { trip.deletedDate = .now } label: {
-                                        Label("Delete", systemImage: "trash")
+                                        Image(systemName: "trash")
+                                            .font(.caption.weight(.semibold))
+                                            .padding(.vertical, 7)
+                                            .padding(.horizontal, 14)
+                                            .background(.red.opacity(0.12), in: Capsule())
+                                            .foregroundStyle(.red)
                                     }
+                                    .buttonStyle(.borderless)
                                 }
+                            }
+                            .padding(.vertical, 2)
                         }
                     } header: {
                         Label("Drives to Review", systemImage: "car.circle.fill")
                             .foregroundStyle(.orange)
                     } footer: {
-                        Text("Auto-detected drives. Tap to set a category, swipe right to confirm, or swipe left to delete.")
+                        Text("Auto-detected drives. Confirm to keep, Categorize to set a purpose, or delete.")
                     }
                 }
 

@@ -1,6 +1,7 @@
 import ActivityKit
 import WidgetKit
 import SwiftUI
+import UIKit
 
 // MARK: - Activity attributes (must match BusinessTracker/Models/TimerActivityAttributes.swift)
 
@@ -31,15 +32,20 @@ private struct TimerAppBadge: View {
     var iconSize: CGFloat = 25   // retained for call-site compatibility (unused now)
 
     var body: some View {
-        Image("freelancedLogo")
-            .resizable()
-            .scaledToFill()
+        // Glyph badge — the logo asset won't render reliably in a Live Activity,
+        // so we use a branded gradient tile + SF Symbol instead.
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(brandGradient)
             .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-            .overlay(
+            .overlay {
+                Image(systemName: "stopwatch.fill")
+                    .font(.system(size: iconSize, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .overlay {
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
                     .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)
-            )
+            }
             .shadow(color: brandIndigo.opacity(0.35), radius: 4, x: 0, y: 2)
     }
 }

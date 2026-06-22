@@ -35,6 +35,7 @@ struct MileageTripEditView: View {
     @State private var isRoundTrip = false
     @State private var showFromSearch = false
     @State private var showToSearch = false
+    @State private var showFullMap = false
 
     init(trip: MileageTrip) {
         self.trip = trip
@@ -64,14 +65,19 @@ struct MileageTripEditView: View {
         editMode == .address ? toLabel : manualEnd
     }
 
-    private var reimbursement: Double { totalMiles * ratePerMile }
+    /// A GPS-tracked trip (manual live-track or auto-detect) — start/end + miles
+    /// are already captured, so we show them read-only instead of asking for them.
+    private var isTracked: Bool { !trip.routeCoordinates.isEmpty }
+    private var effectiveMiles: Double { isTracked ? trip.miles : totalMiles }
+
+    private var reimbursement: Double { effectiveMiles * ratePerMile }
 
     private var canCalculate: Bool {
         fromResult != nil && toResult != nil && !isCalculating
     }
 
     private var canSave: Bool {
-        totalMiles > 0 && !resolvedStart.isEmpty && !resolvedEnd.isEmpty
+        isTracked || (totalMiles > 0 && !resolvedStart.isEmpty && !resolvedEnd.isEmpty)
     }
 
     var body: some View {
@@ -80,11 +86,13 @@ struct MileageTripEditView: View {
                 // Captured GPS route (auto-detected drives, Phase 2)
                 if !trip.routeCoordinates.isEmpty {
                     Section {
-                        TrackedRouteMap(coordinates: trip.routeCoordinates)
+                        TrackedRouteMap(coordinates: trip.routeCoordinates) { showFullMap = true }
                             .frame(height: 200)
                             .listRowInsets(EdgeInsets())
                     } header: {
                         Label("Tracked Route", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    } footer: {
+                        Text("Tap the map to view it full screen.")
                     }
                 }
 
@@ -94,33 +102,45 @@ struct MileageTripEditView: View {
                     PurposeChipsRow(purpose: $purpose)
                 }
 
-                Section("Route") {
-                    Picker("Entry Mode", selection: $editMode) {
-                        ForEach(MileageEditMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: editMode) { _, _ in
-                        calculatedMiles = nil
-                        calculationError = nil
-                    }
-
-                    switch editMode {
-                    case .manual:  manualFields
-                    case .address: addressFields
-                    }
-
-                    if oneWayMiles > 0 && editMode == .address {
-                        Toggle(isOn: $isRoundTrip) {
-                            Label("Round Trip", systemImage: "arrow.triangle.2.circlepath")
+                if isTracked {
+                    // Tracked trip — endpoints + distance captured from GPS (read-only).
+                    Section("Route") {
+                        LabeledContent("From", value: trip.startLocation.isEmpty ? "Locating…" : trip.startLocation)
+                        LabeledContent("To", value: trip.endLocation.isEmpty ? "Locating…" : trip.endLocation)
+                        LabeledContent("Distance") {
+                            Text("\(trip.miles.formatted(.number.precision(.fractionLength(2)))) mi")
+                                .foregroundStyle(.secondary)
                         }
-                        if isRoundTrip {
-                            LabeledContent("Each Way") {
-                                Text("\(oneWayMiles.formatted(.number.precision(.fractionLength(2)))) mi")
-                                    .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Section("Route") {
+                        Picker("Entry Mode", selection: $editMode) {
+                            ForEach(MileageEditMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .onChange(of: editMode) { _, _ in
+                            calculatedMiles = nil
+                            calculationError = nil
+                        }
+
+                        switch editMode {
+                        case .manual:  manualFields
+                        case .address: addressFields
+                        }
+
+                        if oneWayMiles > 0 && editMode == .address {
+                            Toggle(isOn: $isRoundTrip) {
+                                Label("Round Trip", systemImage: "arrow.triangle.2.circlepath")
                             }
-                            LabeledContent("Total") {
-                                Text("\(totalMiles.formatted(.number.precision(.fractionLength(2)))) mi")
-                                    .foregroundStyle(.secondary)
+                            if isRoundTrip {
+                                LabeledContent("Each Way") {
+                                    Text("\(oneWayMiles.formatted(.number.precision(.fractionLength(2)))) mi")
+                                        .foregroundStyle(.secondary)
+                                }
+                                LabeledContent("Total") {
+                                    Text("\(totalMiles.formatted(.number.precision(.fractionLength(2)))) mi")
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -170,6 +190,9 @@ struct MileageTripEditView: View {
                     toAddress = fullAddressFor(result)
                     calculatedMiles = nil
                 }
+            }
+            .fullScreenCover(isPresented: $showFullMap) {
+                FullRouteMapView(coordinates: trip.routeCoordinates)
             }
         }
     }
@@ -271,51 +294,95 @@ struct MileageTripEditView: View {
     private func save() {
         trip.date = date
         trip.purpose = purpose.isEmpty ? "Business trip" : purpose
-        trip.startLocation = resolvedStart
-        trip.endLocation = resolvedEnd
-        // Only refresh export addresses when re-picked in address mode (preserves
-        // a previously-captured full address when just editing other fields).
-        if editMode == .address {
-            trip.startAddress = fromAddress
-            trip.endAddress = toAddress
-        }
-        trip.miles = editMode == .address ? totalMiles : manualMiles
         trip.notes = notes
+        // For a GPS-tracked trip, leave the captured start/end/miles/route alone.
+        if !isTracked {
+            trip.startLocation = resolvedStart
+            trip.endLocation = resolvedEnd
+            // Only refresh export addresses when re-picked in address mode (preserves
+            // a previously-captured full address when just editing other fields).
+            if editMode == .address {
+                trip.startAddress = fromAddress
+                trip.endAddress = toAddress
+            }
+            trip.miles = editMode == .address ? totalMiles : manualMiles
+        }
         dismiss()
     }
 }
 
-// MARK: - Tracked route map (auto-detected drives)
+// MARK: - Tracked route map
 
-/// A static (non-interactive) map preview of a captured GPS route with start/end pins.
+/// Region that fits the whole route with a little padding.
+private func routeRegion(_ coordinates: [CLLocationCoordinate2D]) -> MKCoordinateRegion {
+    let lats = coordinates.map(\.latitude)
+    let lons = coordinates.map(\.longitude)
+    guard let minLat = lats.min(), let maxLat = lats.max(),
+          let minLon = lons.min(), let maxLon = lons.max() else {
+        return MKCoordinateRegion()
+    }
+    let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2,
+                                        longitude: (minLon + maxLon) / 2)
+    let span = MKCoordinateSpan(latitudeDelta: max(0.005, (maxLat - minLat) * 1.4),
+                                longitudeDelta: max(0.005, (maxLon - minLon) * 1.4))
+    return MKCoordinateRegion(center: center, span: span)
+}
+
+@MapContentBuilder
+private func routeContent(_ coordinates: [CLLocationCoordinate2D]) -> some MapContent {
+    MapPolyline(coordinates: coordinates).stroke(.blue, lineWidth: 4)
+    if let start = coordinates.first {
+        Marker("Start", systemImage: "flag.fill", coordinate: start).tint(.green)
+    }
+    if let end = coordinates.last {
+        Marker("End", systemImage: "flag.checkered", coordinate: end).tint(.red)
+    }
+}
+
+/// A non-interactive map thumbnail inside the form. Tapping calls `onExpand`
+/// (the map itself doesn't take gestures, so it doesn't steal the form's scroll).
 private struct TrackedRouteMap: View {
     let coordinates: [CLLocationCoordinate2D]
+    var onExpand: () -> Void = {}
 
     var body: some View {
-        Map(initialPosition: .region(region)) {
-            MapPolyline(coordinates: coordinates)
-                .stroke(.blue, lineWidth: 4)
-            if let start = coordinates.first {
-                Marker("Start", systemImage: "flag.fill", coordinate: start).tint(.green)
-            }
-            if let end = coordinates.last {
-                Marker("End", systemImage: "flag.checkered", coordinate: end).tint(.red)
-            }
+        Map(initialPosition: .region(routeRegion(coordinates))) {
+            routeContent(coordinates)
         }
-        .allowsHitTesting(false)   // a thumbnail inside the form — don't steal scroll gestures
+        .allowsHitTesting(false)
+        .overlay(alignment: .topTrailing) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.primary)
+                .padding(7)
+                .background(.regularMaterial, in: Circle())
+                .padding(8)
+        }
+        .overlay {
+            // Transparent tap target — opens the full-screen, zoomable map.
+            Color.clear.contentShape(Rectangle()).onTapGesture { onExpand() }
+        }
     }
+}
 
-    private var region: MKCoordinateRegion {
-        let lats = coordinates.map(\.latitude)
-        let lons = coordinates.map(\.longitude)
-        guard let minLat = lats.min(), let maxLat = lats.max(),
-              let minLon = lons.min(), let maxLon = lons.max() else {
-            return MKCoordinateRegion()
+/// Full-screen, interactive (pinch/zoom/pan) view of the captured route.
+private struct FullRouteMapView: View {
+    let coordinates: [CLLocationCoordinate2D]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Map(initialPosition: .region(routeRegion(coordinates))) {
+                routeContent(coordinates)
+            }
+            .ignoresSafeArea(edges: .bottom)
+            .navigationTitle("Tracked Route")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
-        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2,
-                                            longitude: (minLon + maxLon) / 2)
-        let span = MKCoordinateSpan(latitudeDelta: max(0.005, (maxLat - minLat) * 1.4),
-                                    longitudeDelta: max(0.005, (maxLon - minLon) * 1.4))
-        return MKCoordinateRegion(center: center, span: span)
     }
 }

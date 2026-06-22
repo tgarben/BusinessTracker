@@ -20,18 +20,30 @@ struct CloudSyncRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            SettingsIcon(symbol: icon, color: color)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("iCloud Sync")
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                SettingsIcon(symbol: icon, color: color)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("iCloud Sync")
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(label)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(color)
             }
-            Spacer()
-            Text(label)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(color)
+
+            // Diagnostic: when CloudKit fell back to local, show why (readable on
+            // TestFlight where there's no Xcode console).
+            if state == .localOnly, let err = BusinessTrackerApp.cloudKitInitError {
+                Text("CloudKit error: \(err)")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .task {
             account = try? await CKContainer(identifier: "iCloud.com.garbenTechnologies.BusinessTracker")

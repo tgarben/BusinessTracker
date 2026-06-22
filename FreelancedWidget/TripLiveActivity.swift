@@ -1,6 +1,7 @@
 import ActivityKit
 import WidgetKit
 import SwiftUI
+import UIKit
 
 // MARK: - Activity attributes (must match BusinessTracker/Models/TripActivityAttributes.swift)
 
@@ -23,15 +24,20 @@ private struct TripAppBadge: View {
     var corner: CGFloat = 13
 
     var body: some View {
-        Image("freelancedLogo")
-            .resizable()
-            .scaledToFill()
+        // Glyph badge — the logo asset won't render reliably in a Live Activity,
+        // so we use a branded gradient tile + SF Symbol instead.
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(tripGreen.gradient)
             .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-            .overlay(
+            .overlay {
+                Image(systemName: "car.fill")
+                    .font(.system(size: size * 0.44, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .overlay {
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
                     .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)
-            )
+            }
             .shadow(color: tripGreen.opacity(0.35), radius: 4, x: 0, y: 2)
     }
 }

@@ -59,6 +59,20 @@
 			);
 			target = 1E164BBF2FD4E77A0072457A /* BusinessTracker */;
 		};
+		1EE3A1952FE9D44800FFE110 /* Exceptions for "BusinessTracker" folder in "FreelancedWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+			);
+			target = 1E530AEF2FDA515A0066D4D6 /* FreelancedWidgetExtension */;
+		};
+		1EE3A1972FE9D44F00FFE110 /* Exceptions for "FreelancedWidget" folder in "BusinessTracker" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+			);
+			target = 1E164BBF2FD4E77A0072457A /* BusinessTracker */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -66,6 +80,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				1E530B0C2FDA51E70066D4D6 /* Exceptions for "BusinessTracker" folder in "BusinessTracker" target */,
+				1EE3A1952FE9D44800FFE110 /* Exceptions for "BusinessTracker" folder in "FreelancedWidgetExtension" target */,
 			);
 			path = BusinessTracker;
 			sourceTree = "<group>";
@@ -73,6 +88,7 @@
 		1E530AF62FDA515A0066D4D6 /* FreelancedWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				1EE3A1972FE9D44F00FFE110 /* Exceptions for "FreelancedWidget" folder in "BusinessTracker" target */,
 				1E530B052FDA515B0066D4D6 /* Exceptions for "FreelancedWidget" folder in "FreelancedWidgetExtension" target */,
 			);
 			path = FreelancedWidget;

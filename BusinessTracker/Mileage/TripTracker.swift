@@ -157,7 +157,9 @@ final class TripTracker: NSObject {
             lastLocation = loc
             fixes.append(f)
         }
-        if Date.now.timeIntervalSince(lastLiveUpdate) > 5 {
+        // Refresh the Live Activity's mileage ~every 2s (the elapsed timer
+        // self-advances; only the miles number needs pushing).
+        if Date.now.timeIntervalSince(lastLiveUpdate) > 2 {
             lastLiveUpdate = .now
             refreshLiveActivity()
         }
