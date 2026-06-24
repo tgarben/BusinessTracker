@@ -733,10 +733,23 @@ struct SettingsView: View {
                                 .foregroundStyle(.orange)
                         }
                     }
+
+                    if DriveDetector.shared.otherDeviceIsTracking {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Another device is logging your drives. This one stays off to avoid duplicate trips.",
+                                  systemImage: "antenna.radiowaves.left.and.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("Use This Device Instead") {
+                                DriveDetector.shared.makeThisTrackingDevice()
+                            }
+                            .font(.caption.weight(.semibold))
+                        }
+                    }
                 } header: {
                     Text("Automatic Mileage")
                 } footer: {
-                    Text("Beta — detects and logs your drives automatically in the background so you don't have to start a trip. Requires \u{201C}Always\u{201D} location access; turn off anytime. Auto-logged drives appear in Mileage for you to review and categorize.")
+                    Text("Beta — detects and logs your drives automatically in the background so you don't have to start a trip. Requires \u{201C}Always\u{201D} location access; turn off anytime. Auto-logged drives appear in Mileage for you to review and categorize. To avoid duplicates, only one device logs drives at a time — others still see them.")
                 }
 
                 // MARK: Data Export

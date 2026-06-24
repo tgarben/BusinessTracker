@@ -72,6 +72,9 @@ final class TripTracker: NSObject {
     }
 
     private func begin() {
+        // If the auto-detector is mid-drive, abandon its session so this manual
+        // trip doesn't double-log the same drive.
+        DriveDetector.shared.cancelActiveDriveForManualTracking()
         isTracking = true
         isPaused = false
         distanceMeters = 0

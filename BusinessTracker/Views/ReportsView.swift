@@ -9,34 +9,54 @@ enum ReportRange: String, CaseIterable {
     case quarter = "Quarter"
     case year    = "Year"
 
-    func start(using cal: Calendar = .current) -> Date {
-        let now = Date.now
+    /// Start of the period containing `anchor`.
+    func start(anchor: Date, using cal: Calendar = .current) -> Date {
         switch self {
-        case .week:    return cal.startOfWeek(for: now)
-        case .month:   return cal.startOfMonth(for: now)
-        case .quarter: return cal.startOfQuarter(for: now)
-        case .year:    return cal.startOfYear(for: now)
+        case .week:    return cal.startOfWeek(for: anchor)
+        case .month:   return cal.startOfMonth(for: anchor)
+        case .quarter: return cal.startOfQuarter(for: anchor)
+        case .year:    return cal.startOfYear(for: anchor)
         }
     }
 
-    func label(using cal: Calendar = .current) -> String {
-        let now = Date.now
+    /// Exclusive end of the period (= start of the next period).
+    func end(anchor: Date, using cal: Calendar = .current) -> Date {
+        let s = start(anchor: anchor, using: cal)
+        switch self {
+        case .week:    return cal.date(byAdding: .day,   value: 7, to: s) ?? s
+        case .month:   return cal.date(byAdding: .month, value: 1, to: s) ?? s
+        case .quarter: return cal.date(byAdding: .month, value: 3, to: s) ?? s
+        case .year:    return cal.date(byAdding: .year,  value: 1, to: s) ?? s
+        }
+    }
+
+    /// Move an anchor by whole periods (negative = earlier).
+    func advance(_ anchor: Date, by steps: Int, using cal: Calendar = .current) -> Date {
+        switch self {
+        case .week:    return cal.date(byAdding: .weekOfYear, value: steps,     to: anchor) ?? anchor
+        case .month:   return cal.date(byAdding: .month,      value: steps,     to: anchor) ?? anchor
+        case .quarter: return cal.date(byAdding: .month,      value: 3 * steps, to: anchor) ?? anchor
+        case .year:    return cal.date(byAdding: .year,       value: steps,     to: anchor) ?? anchor
+        }
+    }
+
+    func label(anchor: Date, using cal: Calendar = .current) -> String {
         switch self {
         case .week:
-            let start = cal.startOfWeek(for: now)
+            let start = cal.startOfWeek(for: anchor)
             let end   = cal.date(byAdding: .day, value: 6, to: start) ?? start
             let fmt   = DateFormatter()
             fmt.dateFormat = "MMM d"
             return "\(fmt.string(from: start))–\(fmt.string(from: end))"
         case .month:
-            return now.formatted(.dateTime.month(.wide).year())
+            return anchor.formatted(.dateTime.month(.wide).year())
         case .quarter:
-            let month  = cal.component(.month, from: now)
-            let year   = cal.component(.year, from: now)
+            let month  = cal.component(.month, from: anchor)
+            let year   = cal.component(.year, from: anchor)
             let q      = (month - 1) / 3 + 1
             return "Q\(q) \(year)"
         case .year:
-            return now.formatted(.dateTime.year())
+            return anchor.formatted(.dateTime.year())
         }
     }
 }
@@ -75,19 +95,61 @@ struct ReportsView: View {
 
     @State private var showFuelSettings = false
     @State private var selectedRange: ReportRange = .month
+    /// Any date inside the period being viewed; prev/next moves it a period at a time.
+    @State private var anchorDate: Date = .now
     @State private var reportPDFURL: URL? = nil
 
     // MARK: - Range window
 
-    private var rangeStart: Date { selectedRange.start() }
-    private var rangeLabel: String { selectedRange.label() }
+    private var rangeStart: Date { selectedRange.start(anchor: anchorDate) }
+    private var rangeEnd: Date { selectedRange.end(anchor: anchorDate) }
+    private var rangeLabel: String { selectedRange.label(anchor: anchorDate) }
+    /// True when the viewed period is the one that contains today (blocks navigating into the future).
+    private var isCurrentPeriod: Bool { rangeStart <= .now && .now < rangeEnd }
+
+    private func inRange(_ date: Date) -> Bool { date >= rangeStart && date < rangeEnd }
+    private func step(_ direction: Int) { anchorDate = selectedRange.advance(anchorDate, by: direction) }
+
+    /// How many whole periods back the viewed window is from the current one (0 = current).
+    private var periodsAgo: Int {
+        let cal = Calendar.current
+        let cur = selectedRange.start(anchor: .now)
+        switch selectedRange {
+        case .week:    return cal.dateComponents([.weekOfYear], from: rangeStart, to: cur).weekOfYear ?? 0
+        case .month:   return cal.dateComponents([.month], from: rangeStart, to: cur).month ?? 0
+        case .quarter: return (cal.dateComponents([.month], from: rangeStart, to: cur).month ?? 0) / 3
+        case .year:    return cal.dateComponents([.year], from: rangeStart, to: cur).year ?? 0
+        }
+    }
+
+    private var periodSubtitle: String {
+        let n = periodsAgo
+        let unit = selectedRange.rawValue.lowercased()
+        if n <= 0 { return "Current \(selectedRange.rawValue)" }
+        return n == 1 ? "Last \(unit)" : "\(n) \(unit)s ago"
+    }
+
+    @ViewBuilder
+    private func stepButton(_ symbol: String, direction: Int, disabled: Bool) -> some View {
+        Button { step(direction) } label: {
+            Image(systemName: symbol)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(disabled ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.tint))
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color(.tertiarySystemFill)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .accessibilityLabel("\(direction < 0 ? "Previous" : "Next") \(selectedRange.rawValue)")
+    }
 
     // MARK: - Range aggregates
 
-    private var monthEntries: [TimeEntry]     { timeEntries.filter { $0.date >= rangeStart } }
-    private var monthTrips: [MileageTrip]     { trips.filter { $0.date >= rangeStart } }
-    private var monthExpenses: [Expense]      { expenses.filter { $0.date >= rangeStart } }
-    private var monthIncome: [IncomeEntry]    { incomeEntries.filter { $0.date >= rangeStart } }
+    private var monthEntries: [TimeEntry]     { timeEntries.filter { inRange($0.date) } }
+    private var monthTrips: [MileageTrip]     { trips.filter { inRange($0.date) } }
+    private var monthExpenses: [Expense]      { expenses.filter { inRange($0.date) } }
+    private var monthIncome: [IncomeEntry]    { incomeEntries.filter { inRange($0.date) } }
 
     private var totalHours: Double            { monthEntries.reduce(0) { $0 + $1.hours } }
     private var totalEarnings: Double         { monthEntries.reduce(0) { $0 + $1.earnings } }
@@ -160,12 +222,32 @@ struct ReportsView: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("Range", selection: $selectedRange) {
-                        ForEach(ReportRange.allCases, id: \.self) { Text($0.rawValue) }
+                    VStack(spacing: 26) {
+                        Picker("Range", selection: $selectedRange) {
+                            ForEach(ReportRange.allCases, id: \.self) { Text($0.rawValue) }
+                        }
+                        .pickerStyle(.segmented)
+
+                        HStack(spacing: 12) {
+                            stepButton("chevron.left", direction: -1, disabled: false)
+
+                            Spacer(minLength: 0)
+                            VStack(spacing: 2) {
+                                Text(rangeLabel)
+                                    .font(.headline)
+                                    .monospacedDigit()
+                                    .contentTransition(.numericText())
+                                Text(periodSubtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(isCurrentPeriod ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                            }
+                            Spacer(minLength: 0)
+
+                            stepButton("chevron.right", direction: 1, disabled: isCurrentPeriod)
+                        }
+                        .animation(.snappy(duration: 0.25), value: anchorDate)
                     }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                    .padding(.vertical, 4)
                 }
 
                 if hasData {
@@ -263,7 +345,8 @@ struct ReportsView: View {
                     }
                 }
             }
-            .onChange(of: selectedRange) { _, _ in reportPDFURL = nil }
+            .onChange(of: selectedRange) { _, _ in anchorDate = .now; reportPDFURL = nil }
+            .onChange(of: anchorDate) { _, _ in reportPDFURL = nil }
             .sheet(isPresented: $showFuelSettings) {
                 FuelSettingsSheet(mpg: $mpg, gasPrice: $gasPrice)
             }
