@@ -18,6 +18,7 @@ enum TimeBillingFilter: String, CaseIterable, Identifiable {
 
 struct TimeTrackingView: View {
     @Environment(TimerState.self) private var timerState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }, sort: \TimeEntry.date, order: .reverse) private var entries: [TimeEntry]
 
     @State private var showLogTime = false
@@ -193,7 +194,7 @@ struct TimeTrackingView: View {
                     .transition(.scale(scale: 0.8).combined(with: .opacity))
                 }
             }
-            .animation(.spring(duration: 0.3), value: timerState.isActive)
+            .animation(reduceMotion ? nil : .spring(duration: 0.3), value: timerState.isActive)
             .confirmationDialog("Delete Time Entry?", isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: { if !$0 { pendingDelete = nil } }

@@ -62,6 +62,7 @@ enum ShareOutcome {
 struct DocumentPreviewView: View {
     let doc: PreviewDoc
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showToast = false
     @State private var shareItem: SharePDF?
 
@@ -98,9 +99,9 @@ struct DocumentPreviewView: View {
                 }
                 .task {
                     guard doc.toast != nil else { return }
-                    withAnimation(.spring(duration: 0.45)) { showToast = true }
+                    withAnimation(reduceMotion ? nil : .spring(duration: 0.45)) { showToast = true }
                     try? await Task.sleep(for: .seconds(1.9))
-                    withAnimation(.easeOut(duration: 0.3)) { showToast = false }
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) { showToast = false }
                 }
         }
     }

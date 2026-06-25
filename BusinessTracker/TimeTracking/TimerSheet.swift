@@ -5,6 +5,7 @@ struct TimerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(TimerState.self) private var timerState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
     @Query(sort: \TimePreset.sortOrder) private var presets: [TimePreset]
 
@@ -50,7 +51,7 @@ struct TimerSheet: View {
                         Text(timerState.isActive ? timerState.elapsed.timerFormatted : "0:00:00")
                             .font(.system(size: 64, weight: .thin, design: .monospaced))
                             .foregroundStyle(timerState.isRunning ? .red : (timerState.isPaused ? .orange : .primary))
-                            .contentTransition(.numericText())
+                            .contentTransition(reduceMotion ? .identity : .numericText())
                     }
 
                     if !timerState.isActive {
@@ -258,7 +259,7 @@ struct TimerSheet: View {
         modelContext.insert(entry)
         activePreset = nil
 
-        withAnimation(.spring(duration: 0.4)) {
+        withAnimation(reduceMotion ? nil : .spring(duration: 0.4)) {
             savedHours   = hours
             savedClient  = client
             savedProject = project

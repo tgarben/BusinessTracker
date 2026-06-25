@@ -5,6 +5,7 @@ struct ExpensesView: View {
     @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }, sort: \Expense.date, order: .reverse) private var expenses: [Expense]
     @Query(sort: \ExpensePreset.sortOrder) private var presets: [ExpensePreset]
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showAddExpense = false
     @State private var showHistory = false
@@ -155,7 +156,7 @@ struct ExpensesView: View {
                     if presets.isEmpty {
                         showAddExpense = true
                     } else {
-                        withAnimation(.spring(duration: 0.3)) { fabExpanded.toggle() }
+                        withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) { fabExpanded.toggle() }
                     }
                 } label: {
                     Image(systemName: "plus")
@@ -199,7 +200,7 @@ struct ExpensesView: View {
     }
 
     private func collapseFAB() {
-        withAnimation(.spring(duration: 0.3)) { fabExpanded = false }
+        withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) { fabExpanded = false }
     }
 
     private func selectPreset(_ preset: ExpensePreset) {

@@ -7,6 +7,7 @@ import UserNotifications
 // MARK: - Root
 
 struct OnboardingView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage("user_name") private var userName: String = ""
     @State private var page = 0
@@ -30,12 +31,12 @@ struct OnboardingView: View {
                     .tag(4)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .animation(.spring(duration: 0.4), value: page)
+            .animation(reduceMotion ? nil : .spring(duration: 0.4), value: page)
         }
     }
 
     private func advance() {
-        withAnimation(.spring(duration: 0.4)) { page = min(page + 1, total - 1) }
+        withAnimation(reduceMotion ? nil : .spring(duration: 0.4)) { page = min(page + 1, total - 1) }
     }
 
     private func finish() {
@@ -98,6 +99,7 @@ private struct iCloudPrefillBadge: View {
 }
 
 private struct OnboardingProgress: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let current: Int
     let total: Int
 
@@ -109,7 +111,7 @@ private struct OnboardingProgress: View {
                     .frame(width: i == current ? 24 : 7, height: 7)
             }
         }
-        .animation(.spring(duration: 0.4), value: current)
+        .animation(reduceMotion ? nil : .spring(duration: 0.4), value: current)
     }
 }
 
@@ -547,6 +549,7 @@ private struct BusinessInfoPage: View {
 // MARK: - Permissions
 
 private struct PermissionsPage: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let page: Int
     let total: Int
     let onSkip: () -> Void
@@ -607,18 +610,18 @@ private struct PermissionsPage: View {
 
     private func requestLocation() {
         CLLocationManager().requestWhenInUseAuthorization()
-        withAnimation { locationDone = true }
+        withAnimation(reduceMotion ? nil : .default) { locationDone = true }
     }
 
     private func requestCamera() {
         AVCaptureDevice.requestAccess(for: .video) { _ in
-            DispatchQueue.main.async { withAnimation { cameraDone = true } }
+            DispatchQueue.main.async { withAnimation(reduceMotion ? nil : .default) { cameraDone = true } }
         }
     }
 
     private func requestNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
-            DispatchQueue.main.async { withAnimation { notificationsDone = true } }
+            DispatchQueue.main.async { withAnimation(reduceMotion ? nil : .default) { notificationsDone = true } }
         }
     }
 }

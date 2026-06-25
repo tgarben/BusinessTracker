@@ -93,6 +93,8 @@ struct ReportsView: View {
     @AppStorage("tax_incomeBracketRate") private var bracketRate: Double = 22.0
     @AppStorage("user_name") private var userName: String = ""
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var showFuelSettings = false
     @State private var selectedRange: ReportRange = .month
     /// Any date inside the period being viewed; prev/next moves it a period at a time.
@@ -236,7 +238,7 @@ struct ReportsView: View {
                                 Text(rangeLabel)
                                     .font(.headline)
                                     .monospacedDigit()
-                                    .contentTransition(.numericText())
+                                    .contentTransition(reduceMotion ? .identity : .numericText())
                                 Text(periodSubtitle)
                                     .font(.caption)
                                     .foregroundStyle(isCurrentPeriod ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
@@ -245,7 +247,7 @@ struct ReportsView: View {
 
                             stepButton("chevron.right", direction: 1, disabled: isCurrentPeriod)
                         }
-                        .animation(.snappy(duration: 0.25), value: anchorDate)
+                        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: anchorDate)
                     }
                     .padding(.vertical, 4)
                 }
