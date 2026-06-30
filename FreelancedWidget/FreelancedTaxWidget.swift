@@ -64,6 +64,7 @@ struct TaxProvider: TimelineProvider {
 struct TaxWidgetView: View {
     let entry: TaxEntry
     @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     private var next: TaxDueDate? { entry.dueDates.first { $0.isNext } }
 
@@ -113,13 +114,28 @@ struct TaxWidgetView: View {
 
             if let next {
                 let days = daysUntil(next.date)
-                Text(days == 0 ? "Due today" : (days == 1 ? "Due tomorrow" : "in \(days) days"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .frame(maxWidth: .infinity)
-                    .background(.orange, in: Capsule())
+                let label = days == 0 ? "Due today" : (days == 1 ? "Due tomorrow" : "in \(days) days")
+                Group {
+                    if renderingMode == .fullColor {
+                        // Solid orange pill with white text reads well in full color.
+                        Text(label)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .frame(maxWidth: .infinity)
+                            .background(.orange, in: Capsule())
+                    } else {
+                        // Tinted / vibrant (mono) mode flattens solid fills into opaque
+                        // blobs that hide the text — use a translucent pill so the label
+                        // stays legible against the monochrome tint.
+                        Text(label)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .frame(maxWidth: .infinity)
+                            .background(.secondary.opacity(0.25), in: Capsule())
+                    }
+                }
+                .font(.caption.weight(.semibold))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

@@ -221,8 +221,12 @@ struct HomeView: View {
 
     // MARK: Today aggregates
 
+    /// Auto-detected drives awaiting review are excluded from all totals until
+    /// the user confirms them (they live in the Mileage tab's review section).
+    private var reviewedTrips: [MileageTrip] { trips.filter { !$0.needsReview } }
+
     private var todayEntries: [TimeEntry] { timeEntries.filter { $0.date >= todayStart } }
-    private var todayTrips: [MileageTrip]  { trips.filter { $0.date >= todayStart } }
+    private var todayTrips: [MileageTrip]  { reviewedTrips.filter { $0.date >= todayStart } }
     private var todayExpenses: [Expense]   { expenses.filter { $0.date >= todayStart } }
 
     private var todayHours: Double   { todayEntries.reduce(0) { $0 + $1.hours } }
@@ -248,7 +252,7 @@ struct HomeView: View {
         // Ready to Invoice — unbilled time
         let unbilled = timeEntries.filter { $0.invoice == nil }
         // Mileage deduction — year to date
-        let ytdMiles = trips.filter { $0.date >= yearStart }.reduce(0.0) { $0 + $1.miles }
+        let ytdMiles = reviewedTrips.filter { $0.date >= yearStart }.reduce(0.0) { $0 + $1.miles }
         // This-month windows
         let monthExpenses = expenses.filter { $0.date >= monthStart }
         let monthEntries = timeEntries.filter { $0.date >= monthStart }
@@ -268,7 +272,7 @@ struct HomeView: View {
         // Quote pipeline — open (Draft/Sent) quotes
         let openQuotes = quotes.filter { $0.displayStatus == .draft || $0.displayStatus == .sent }
         // Recent trips
-        let recentTrips = trips.sorted { $0.date > $1.date }.prefix(3).map {
+        let recentTrips = reviewedTrips.sorted { $0.date > $1.date }.prefix(3).map {
             (title: $0.routeDescription, miles: $0.miles, date: $0.date)
         }
         // Recent activity — merged feed across trackers, newest first
@@ -278,7 +282,7 @@ struct HomeView: View {
                              title: $0.project?.name ?? $0.client?.name ?? "Time",
                              trailing: String(format: "%.1f hrs", $0.hours))
         }
-        activity += trips.map {
+        activity += reviewedTrips.map {
             HomeActivityItem(date: $0.date, icon: "car.fill", color: .blue,
                              title: $0.purpose.isEmpty ? $0.routeDescription : $0.purpose,
                              trailing: String(format: "%.0f mi", $0.miles))

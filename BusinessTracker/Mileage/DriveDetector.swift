@@ -22,6 +22,14 @@ import UIKit
 final class DriveDetector: NSObject {
     static let shared = DriveDetector()
 
+    /// ⚑ Master feature switch. **Auto-Mileage is SHELVED for 1.0** (Tyler + Jack,
+    /// 2026-06-27) — kept fully built but dormant. While `false`: `refreshFromSettings`
+    /// no-ops (releasing any election so other devices aren't blocked), no background
+    /// monitoring ever starts, and the Settings "Automatic Mileage (BETA)" section is
+    /// hidden. Flip to `true` to re-enable the beta (see the Auto-Mileage plan in
+    /// CLAUDE.md — also re-check the CloudKit redeploy of the auto fields before shipping).
+    static let featureEnabled = false
+
     /// Opt-in toggle key. Device-specific → intentionally NOT in `CloudKeyValueSync`.
     static let enabledKey = "mileage_autoDetectEnabled"
 
@@ -206,6 +214,10 @@ final class DriveDetector: NSObject {
     /// monitoring. Anything else releases the election (so it can't silently block
     /// other devices) and stays dormant.
     func refreshFromSettings() {
+        // Auto-Mileage shelved for 1.0 — stay fully dormant (release any election we
+        // still hold so other devices aren't blocked, and never start monitoring).
+        guard Self.featureEnabled else { clearSnapshot(); releaseTrackingDeviceIfOwner(); stop(); return }
+
         guard isEnabled else { clearSnapshot(); releaseTrackingDeviceIfOwner(); stop(); return }
 
         recoverInterruptedDriveIfNeeded()
@@ -233,6 +245,7 @@ final class DriveDetector: NSObject {
     /// Toggle entry point (from Settings). Persists the flag; everything else (claim,
     /// permission request, start/stop) flows through `refreshFromSettings`.
     func setEnabled(_ on: Bool) {
+        guard Self.featureEnabled else { return }   // shelved — ignore
         UserDefaults.standard.set(on, forKey: Self.enabledKey)
         refreshFromSettings()
     }

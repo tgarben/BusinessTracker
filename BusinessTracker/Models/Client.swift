@@ -26,6 +26,12 @@ final class Client: SoftDeletable {
     @Relationship(deleteRule: .nullify, inverse: \Expense.client)
     var expenses: [Expense]? = nil
 
+    @Relationship(deleteRule: .nullify, inverse: \MileageTrip.client)
+    var mileageTrips: [MileageTrip]? = nil
+
+    @Relationship(deleteRule: .nullify, inverse: \MileagePreset.client)
+    var mileagePresets: [MileagePreset]? = nil
+
     @Relationship(deleteRule: .nullify, inverse: \TimePreset.client)
     var timePresets: [TimePreset]? = nil
 

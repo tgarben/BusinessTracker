@@ -118,6 +118,7 @@ private struct CreateQuoteContent: View {
 
     // Business defaults reused from invoicing
     @AppStorage("business_defaultTaxRate") private var defaultTaxRate: Double = 0
+    @AppStorage("business_taxID") private var businessTaxID: String = ""
     @AppStorage("business_defaultPaymentTerms") private var defaultPaymentTerms: String = "Due Upon Receipt"
     @AppStorage("business_acceptedPayments") private var defaultAcceptedPayments: String = ""
     @AppStorage("business_paymentInstructions") private var defaultPaymentInstructions: String = ""
@@ -134,6 +135,7 @@ private struct CreateQuoteContent: View {
     @State private var paymentInstructions: String = ""
     @State private var poNumber: String = ""
     @State private var notes: String = ""
+    @State private var includeTaxID: Bool = true
     @State private var didPrefill = false
     @State private var preview: PreviewDoc?
 
@@ -310,6 +312,14 @@ private struct CreateQuoteContent: View {
                 TextField("Scope notes, terms, or a thank-you…", text: $notes, axis: .vertical)
                     .lineLimit(3...6)
             }
+
+            if !businessTaxID.isEmpty {
+                Section {
+                    Toggle("Include Tax ID / EIN", isOn: $includeTaxID)
+                } footer: {
+                    Text("Prints your Tax ID / EIN (\(businessTaxID)) in the document footer. Turn off to omit it from this quote.")
+                }
+            }
         }
         .navigationTitle("New Quote")
         .navigationSubtitle(client.name)
@@ -368,6 +378,7 @@ private struct CreateQuoteContent: View {
         quote.acceptedPayments = acceptedPayments
         quote.paymentInstructions = paymentInstructions
         quote.poNumber = poNumber
+        quote.includeTaxID = includeTaxID
         modelContext.insert(quote)
 
         for (index, draft) in drafts.enumerated() where draft.isValid {
@@ -604,6 +615,7 @@ struct QuoteDetailView: View {
         new.acceptedPayments = quote.acceptedPayments
         new.paymentInstructions = quote.paymentInstructions
         new.poNumber = quote.poNumber
+        new.includeTaxID = quote.includeTaxID
         // Fresh Draft, not linked to any invoice.
         new.status = QuoteStatus.draft.rawValue
         new.convertedInvoiceNumber = 0
@@ -666,6 +678,7 @@ struct QuoteDetailView: View {
         invoice.acceptedPayments = quote.acceptedPayments
         invoice.paymentInstructions = quote.paymentInstructions
         invoice.poNumber = quote.poNumber
+        invoice.includeTaxID = quote.includeTaxID
         modelContext.insert(invoice)
 
         for item in items {
@@ -736,7 +749,8 @@ func makeQuotePDF(quote: Quote, userName: String) -> URL? {
         acceptedPayments: quote.acceptedPayments,
         paymentInstructions: quote.paymentInstructions,
         notes: quote.notes,
-        showAcceptanceLine: true
+        showAcceptanceLine: true,
+        showTaxID: quote.includeTaxID
     )
     return makeDocumentPDF(spec: spec)
 }

@@ -20,7 +20,21 @@ struct MileagePresetsView: View {
                         presetToEdit = preset
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(preset.name).font(.body).foregroundStyle(.primary)
+                            HStack(spacing: 6) {
+                                Text(preset.name).font(.body).foregroundStyle(.primary)
+                                if let client = preset.client {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "person.fill")
+                                        Text(client.name)
+                                    }
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.teal)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 2)
+                                    .background(.teal.opacity(0.12), in: Capsule())
+                                }
+                            }
                             Text("\(preset.startLocation) → \(preset.endLocation)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -59,6 +73,7 @@ struct AddEditMileagePresetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MileagePreset.sortOrder) private var existing: [MileagePreset]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
 
     var preset: MileagePreset?
 
@@ -67,6 +82,7 @@ struct AddEditMileagePresetView: View {
     @State private var endLocation = ""
     @State private var purpose = ""
     @State private var notes = ""
+    @State private var selectedClient: Client?
 
     private var isEditing: Bool { preset != nil }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -84,6 +100,14 @@ struct AddEditMileagePresetView: View {
                 Section("Defaults") {
                     TextField("Category", text: $purpose)
                     PurposeChipsRow(purpose: $purpose)
+                    if !clients.isEmpty {
+                        Picker("Client", selection: $selectedClient) {
+                            Text("None").tag(Optional<Client>.none)
+                            ForEach(clients) { client in
+                                Text(client.name).tag(Optional(client))
+                            }
+                        }
+                    }
                     TextField("Notes", text: $notes, axis: .vertical).lineLimit(2...4)
                 }
             }
@@ -107,6 +131,7 @@ struct AddEditMileagePresetView: View {
         endLocation = preset.endLocation
         purpose = preset.purpose
         notes = preset.notes
+        selectedClient = preset.client
     }
 
     private func save() {
@@ -117,10 +142,11 @@ struct AddEditMileagePresetView: View {
             preset.endLocation = endLocation
             preset.purpose = purpose
             preset.notes = notes
+            preset.client = selectedClient
         } else {
             modelContext.insert(MileagePreset(
                 name: trimmed, startLocation: startLocation, endLocation: endLocation,
-                purpose: purpose, notes: notes, sortOrder: existing.count
+                purpose: purpose, notes: notes, sortOrder: existing.count, client: selectedClient
             ))
         }
         dismiss()

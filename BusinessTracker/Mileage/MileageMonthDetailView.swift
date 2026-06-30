@@ -16,7 +16,7 @@ struct MileageMonthDetailView: View {
         let end = Calendar.current.date(byAdding: .month, value: 1, to: monthStart) ?? monthStart
         _trips = Query(
             filter: #Predicate<MileageTrip> { trip in
-                trip.date >= monthStart && trip.date < end && trip.deletedDate == nil
+                trip.date >= monthStart && trip.date < end && trip.deletedDate == nil && !trip.needsReview
             },
             sort: \MileageTrip.date,
             order: .reverse

@@ -63,6 +63,10 @@ final class Quote: SoftDeletable {
     var acceptedPayments: String = ""
     var poNumber: String = ""
 
+    /// Whether to print the business Tax ID / EIN (from Settings) on this document.
+    /// Default `true` preserves prior behavior; per-document toggle in the create form.
+    var includeTaxID: Bool = true
+
     var client: Client? = nil
 
     @Relationship(deleteRule: .cascade, inverse: \QuoteLineItem.quote)

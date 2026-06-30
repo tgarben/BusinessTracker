@@ -8,6 +8,16 @@ struct BusinessTrackerApp: App {
     @State private var entitlements = Entitlements()
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
+    init() {
+        #if DEBUG
+        // Populates the simulator with demo data when launched with --seed-screenshots.
+        // No-op in release builds, on device, or without the flag. See ScreenshotSeed.
+        MainActor.assumeIsolated {
+            ScreenshotSeed.runIfRequested(container: Self.sharedModelContainer)
+        }
+        #endif
+    }
+
     /// Whether the SwiftData store came up CloudKit-backed (vs. the local-only
     /// fallback). Read by the Settings → iCloud Sync status so a silent fallback
     /// is visible to the user.

@@ -20,6 +20,7 @@ struct AddEditClientView: View {
     @State private var photoData: Data?
     @State private var projectToEdit: Project?
     @State private var showAddProject = false
+    @State private var didSave = false
 
     private var isEditing: Bool { existingClient != nil }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -131,6 +132,9 @@ struct AddEditClientView: View {
                 }
             }
             .onAppear { setup() }
+            // Covers ALL dismissal paths (Cancel button AND swipe-to-dismiss) — discards
+            // the eager-inserted client if it was never saved, so no empty client lingers.
+            .onDisappear { discardIfUnsaved() }
             .sheet(isPresented: $showAddProject) {
                 if let client = workingClient {
                     AddEditProjectView(client: client)
@@ -163,10 +167,16 @@ struct AddEditClientView: View {
     }
 
     private func cancel() {
-        if isNewClient, let client = workingClient {
+        dismiss()   // cleanup handled in discardIfUnsaved() via onDisappear
+    }
+
+    /// Discards the eager-inserted client if the user left without saving (Cancel or
+    /// swipe-to-dismiss). `workingClient = nil` guards against running twice.
+    private func discardIfUnsaved() {
+        if isNewClient, !didSave, let client = workingClient {
             modelContext.delete(client)
+            workingClient = nil
         }
-        dismiss()
     }
 
     private func save() {
@@ -178,6 +188,7 @@ struct AddEditClientView: View {
         client.billingAddress2 = billingAddress2.trimmingCharacters(in: .whitespaces)
         client.email = email.trimmingCharacters(in: .whitespaces)
         client.phone = phone.trimmingCharacters(in: .whitespaces)
+        didSave = true
         dismiss()
     }
 }

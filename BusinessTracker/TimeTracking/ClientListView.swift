@@ -19,8 +19,8 @@ struct ClientsView: View {
     @State private var paywall: ProFeature?
 
     /// Soft-deletes a client and cascades the trash to all of its child records
-    /// (time, income, expenses, invoices, quotes) so none linger in global lists
-    /// during the 30-day window. Projects aren't soft-deletable — they're removed
+    /// (time, income, expenses, mileage, invoices, quotes) so none linger in global
+    /// lists during the 30-day window. Projects aren't soft-deletable — they're removed
     /// by the real cascade when the client is permanently purged. Restoring the
     /// client (from Recently Deleted) brings back the client only; the children
     /// keep their own 30-day trash timers.
@@ -29,6 +29,7 @@ struct ClientsView: View {
         for t in (client.timeEntries ?? [])   where t.deletedDate == nil { t.deletedDate = now }
         for i in (client.incomeEntries ?? []) where i.deletedDate == nil { i.deletedDate = now }
         for e in (client.expenses ?? [])      where e.deletedDate == nil { e.deletedDate = now }
+        for m in (client.mileageTrips ?? [])  where m.deletedDate == nil { m.deletedDate = now }
         for inv in (client.invoices ?? [])    where inv.deletedDate == nil { inv.deletedDate = now }
         for q in (client.quotes ?? [])        where q.deletedDate == nil { q.deletedDate = now }
         client.deletedDate = now
@@ -106,7 +107,7 @@ struct ClientsView: View {
                 }
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: {
-                Text("The client and all its time, income, expenses, invoices and quotes are moved to Recently Deleted. Restoring brings back the client only.")
+                Text("The client and all its time, income, expenses, mileage, invoices and quotes are moved to Recently Deleted. Restoring brings back the client only.")
             }
         }
     }
@@ -229,6 +230,7 @@ struct ClientDetailView: View {
     @Query(filter: #Predicate<TimeEntry> { $0.deletedDate == nil }) private var timeEntries: [TimeEntry]
     @Query(filter: #Predicate<IncomeEntry> { $0.deletedDate == nil }) private var incomeEntries: [IncomeEntry]
     @Query(filter: #Predicate<Expense> { $0.deletedDate == nil }) private var expenses: [Expense]
+    @Query(filter: #Predicate<MileageTrip> { $0.deletedDate == nil }) private var mileageTrips: [MileageTrip]
     @Query(filter: #Predicate<Invoice> { $0.deletedDate == nil }) private var invoices: [Invoice]
     @Query(filter: #Predicate<Quote> { $0.deletedDate == nil }) private var quotes: [Quote]
 
@@ -246,6 +248,10 @@ struct ClientDetailView: View {
         _expenses = Query(
             filter: #Predicate<Expense> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
             sort: \Expense.date, order: .reverse
+        )
+        _mileageTrips = Query(
+            filter: #Predicate<MileageTrip> { $0.client?.persistentModelID == id && $0.deletedDate == nil && !$0.needsReview },
+            sort: \MileageTrip.date, order: .reverse
         )
         _invoices = Query(
             filter: #Predicate<Invoice> { $0.client?.persistentModelID == id && $0.deletedDate == nil },
@@ -266,6 +272,8 @@ struct ClientDetailView: View {
     @State private var editingIncome: IncomeEntry?
     @State private var editingTimeEntry: TimeEntry?
     @State private var editingExpense: Expense?
+    @State private var editingTrip: MileageTrip?
+    @State private var pendingDeleteTrip: ([MileageTrip], IndexSet)?
     @State private var viewingInvoice: Invoice?
     @State private var pendingDeleteIncome: ([IncomeEntry], IndexSet)?
     @State private var pendingDeleteTime: ([TimeEntry], IndexSet)?
@@ -287,6 +295,19 @@ struct ClientDetailView: View {
 
     private var totalHours: Double {
         timeEntries.reduce(0) { $0 + $1.hours }
+    }
+
+    private var clientMiles: Double {
+        mileageTrips.reduce(0) { $0 + $1.miles }
+    }
+
+    private var clientReimbursement: Double {
+        mileageTrips.reduce(0) { $0 + $1.reimbursementAmount }
+    }
+
+    private var mileageSummaryLabel: String {
+        let miles = clientMiles.formatted(.number.precision(.fractionLength(1)))
+        return "\(miles) mi · \(clientReimbursement.asCurrency)"
     }
 
     // MARK: Monthly P&L aggregates
@@ -311,182 +332,229 @@ struct ClientDetailView: View {
         monthTimeEarnings > 0 || monthIncomeReceived > 0 || monthExpenses > 0
     }
 
-    var body: some View {
-        List {
-            // MARK: Photo header
-            Section {
-                VStack(spacing: 12) {
-                    ClientAvatar(photoData: client.photoData, name: client.name, size: 100)
-
-                    Text(client.name).font(.title2.bold())
-
-                    HStack(spacing: 0) {
-                        VStack(spacing: 2) {
-                            Text(totalEarnings.asCurrency)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.green)
-                            Text("Earned").font(.caption2).foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        Divider().frame(height: 28)
-                        VStack(spacing: 2) {
-                            Text(String(format: "%.1f hrs", totalHours))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.indigo)
-                            Text("Hours").font(.caption2).foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        Divider().frame(height: 28)
-                        VStack(spacing: 2) {
-                            Text(totalExpenses.asCurrency)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.red)
-                            Text("Expenses").font(.caption2).foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
+    @ViewBuilder private var expensesSection: some View {
+        Section("Expenses") {
+            if expenses.isEmpty {
+                Text("No expenses logged yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(expenses) { expense in
+                    ExpenseRow(expense: expense)
+                        .contentShape(Rectangle())
+                        .onTapGesture { editingExpense = expense }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
+                .onDelete { pendingDeleteExpense = (expenses, $0) }
+            }
+        }
+    }
+
+    @ViewBuilder private var timeEntriesSection: some View {
+        Section("Time Entries") {
+            if timeEntries.isEmpty {
+                Text("No time entries yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(timeEntries) { entry in
+                    ClientTimeEntryRow(entry: entry)
+                        .contentShape(Rectangle())
+                        .onTapGesture { editingTimeEntry = entry }
+                }
+                .onDelete { pendingDeleteTime = (timeEntries, $0) }
+            }
+        }
+    }
+
+    @ViewBuilder private var mileageSection: some View {
+        Section {
+            if mileageTrips.isEmpty {
+                Text("No trips linked yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(mileageTrips) { trip in
+                    TripRow(trip: trip)
+                        .contentShape(Rectangle())
+                        .onTapGesture { editingTrip = trip }
+                }
+                .onDelete { pendingDeleteTrip = (mileageTrips, $0) }
+            }
+        } header: {
+            HStack {
+                Text("Mileage")
+                Spacer()
+                if !mileageTrips.isEmpty {
+                    Text(mileageSummaryLabel)
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                        .textCase(nil)
+                }
+            }
+        } footer: {
+            Text("Link a trip to this client from the Mileage tab (tap a trip → Client) so it's grouped here for reports and taxes.")
+        }
+    }
+
+    @ViewBuilder private var headerSection: some View {
+        Section {
+            VStack(spacing: 12) {
+                ClientAvatar(photoData: client.photoData, name: client.name, size: 100)
+
+                Text(client.name).font(.title2.bold())
+
+                HStack(spacing: 0) {
+                    VStack(spacing: 2) {
+                        Text(totalEarnings.asCurrency)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.green)
+                        Text("Earned").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    Divider().frame(height: 28)
+                    VStack(spacing: 2) {
+                        Text(String(format: "%.1f hrs", totalHours))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.indigo)
+                        Text("Hours").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    Divider().frame(height: 28)
+                    VStack(spacing: 2) {
+                        Text(totalExpenses.asCurrency)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.red)
+                        Text("Expenses").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    @ViewBuilder private var plSection: some View {
+        if hasMonthData {
+            Section {
+                ClientPLCard(
+                    monthLabel: Date.now.formatted(.dateTime.month(.wide)),
+                    timeEarnings: monthTimeEarnings,
+                    incomeReceived: monthIncomeReceived,
+                    expenses: monthExpenses,
+                    net: monthNet
+                )
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
+        }
+    }
 
-            // MARK: P&L card
-            if hasMonthData {
-                Section {
-                    ClientPLCard(
-                        monthLabel: Date.now.formatted(.dateTime.month(.wide)),
-                        timeEarnings: monthTimeEarnings,
-                        incomeReceived: monthIncomeReceived,
-                        expenses: monthExpenses,
-                        net: monthNet
-                    )
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+    @ViewBuilder private var quotesSection: some View {
+        Section {
+            if quotes.isEmpty {
+                Text("No quotes yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(quotes) { quote in
+                    QuoteRow(quote: quote)
+                        .contentShape(Rectangle())
+                        .onTapGesture { viewingQuote = quote }
                 }
+                .onDelete { pendingDeleteQuote = (quotes, $0) }
             }
+        } header: {
+            HStack {
+                Text("Quotes")
+                Spacer()
+                Button {
+                    if pro.isProEffective { showCreateQuote = true } else { paywall = .quotes }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.caption.weight(.semibold))
+                }
+                .accessibilityLabel("New Quote")
+            }
+        }
+    }
 
-            // MARK: Quotes section
-            Section {
-                if quotes.isEmpty {
-                    Text("No quotes yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                        .padding(.vertical, 4)
-                } else {
-                    ForEach(quotes) { quote in
-                        QuoteRow(quote: quote)
-                            .contentShape(Rectangle())
-                            .onTapGesture { viewingQuote = quote }
-                    }
-                    .onDelete { pendingDeleteQuote = (quotes, $0) }
+    @ViewBuilder private var invoicesSection: some View {
+        Section {
+            if invoices.isEmpty {
+                Text("No invoices yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(invoices) { invoice in
+                    InvoiceRow(invoice: invoice)
+                        .contentShape(Rectangle())
+                        .onTapGesture { viewingInvoice = invoice }
                 }
-            } header: {
-                HStack {
-                    Text("Quotes")
-                    Spacer()
-                    Button {
-                        if pro.isProEffective { showCreateQuote = true } else { paywall = .quotes }
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .accessibilityLabel("New Quote")
-                }
+                .onDelete { pendingDeleteInvoice = (invoices, $0) }
             }
+        } header: {
+            HStack {
+                Text("Invoices")
+                Spacer()
+                Button {
+                    if pro.isProEffective { showCreateInvoice = true } else { paywall = .invoicing }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.caption.weight(.semibold))
+                }
+                .accessibilityLabel("New Invoice")
+            }
+        }
+    }
 
-            // MARK: Invoices section
-            Section {
-                if invoices.isEmpty {
-                    Text("No invoices yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                        .padding(.vertical, 4)
-                } else {
-                    ForEach(invoices) { invoice in
-                        InvoiceRow(invoice: invoice)
-                            .contentShape(Rectangle())
-                            .onTapGesture { viewingInvoice = invoice }
-                    }
-                    .onDelete { pendingDeleteInvoice = (invoices, $0) }
+    @ViewBuilder private var incomeSection: some View {
+        Section {
+            if incomeEntries.isEmpty {
+                Text("No income logged yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(incomeEntries) { entry in
+                    IncomeRow(entry: entry)
+                        .contentShape(Rectangle())
+                        .onTapGesture { editingIncome = entry }
                 }
-            } header: {
-                HStack {
-                    Text("Invoices")
-                    Spacer()
-                    Button {
-                        if pro.isProEffective { showCreateInvoice = true } else { paywall = .invoicing }
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .accessibilityLabel("New Invoice")
-                }
+                .onDelete { pendingDeleteIncome = (incomeEntries, $0) }
             }
+        } header: {
+            HStack {
+                Text("Income")
+                Spacer()
+                Button { showLogIncome = true } label: {
+                    Image(systemName: "plus")
+                        .font(.caption.weight(.semibold))
+                }
+                .accessibilityLabel("Log Income")
+            }
+        }
+    }
 
-            // MARK: Income section
-            Section {
-                if incomeEntries.isEmpty {
-                    Text("No income logged yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                        .padding(.vertical, 4)
-                } else {
-                    ForEach(incomeEntries) { entry in
-                        IncomeRow(entry: entry)
-                            .contentShape(Rectangle())
-                            .onTapGesture { editingIncome = entry }
-                    }
-                    .onDelete { pendingDeleteIncome = (incomeEntries, $0) }
-                }
-            } header: {
-                HStack {
-                    Text("Income")
-                    Spacer()
-                    Button { showLogIncome = true } label: {
-                        Image(systemName: "plus")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .accessibilityLabel("Log Income")
-                }
-            }
-
-            // MARK: Expenses section
-            Section("Expenses") {
-                if expenses.isEmpty {
-                    Text("No expenses logged yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                        .padding(.vertical, 4)
-                } else {
-                    ForEach(expenses) { expense in
-                        ExpenseRow(expense: expense)
-                            .contentShape(Rectangle())
-                            .onTapGesture { editingExpense = expense }
-                    }
-                    .onDelete { pendingDeleteExpense = (expenses, $0) }
-                }
-            }
-
-            // MARK: Time entries section
-            Section("Time Entries") {
-                if timeEntries.isEmpty {
-                    Text("No time entries yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                        .padding(.vertical, 4)
-                } else {
-                    ForEach(timeEntries) { entry in
-                        ClientTimeEntryRow(entry: entry)
-                            .contentShape(Rectangle())
-                            .onTapGesture { editingTimeEntry = entry }
-                    }
-                    .onDelete { pendingDeleteTime = (timeEntries, $0) }
-                }
-            }
+    var body: some View {
+        List {
+            headerSection
+            plSection
+            quotesSection
+            invoicesSection
+            incomeSection
+            expensesSection
+            timeEntriesSection
+            mileageSection
         }
         .listStyle(.insetGrouped)
         .navigationTitle(client.name)
@@ -505,6 +573,7 @@ struct ClientDetailView: View {
         .sheet(item: $editingIncome)          { IncomeEditView(entry: $0) }
         .sheet(item: $editingExpense)         { ExpenseEditView(expense: $0) }
         .sheet(item: $editingTimeEntry)       { TimeEntryEditView(entry: $0) }
+        .sheet(item: $editingTrip)            { MileageTripEditView(trip: $0) }
         .sheet(item: $viewingInvoice)         { InvoiceDetailView(invoice: $0) }
         .confirmationDialog("Delete Income Entry?", isPresented: Binding(
             get: { pendingDeleteIncome != nil },
@@ -541,6 +610,18 @@ struct ClientDetailView: View {
                 pendingDeleteTime = nil
             }
             Button("Cancel", role: .cancel) { pendingDeleteTime = nil }
+        } message: { Text("You can restore this from Recently Deleted for 30 days.") }
+        .confirmationDialog("Delete Trip?", isPresented: Binding(
+            get: { pendingDeleteTrip != nil },
+            set: { if !$0 { pendingDeleteTrip = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let (items, offsets) = pendingDeleteTrip {
+                    for i in offsets { items[i].deletedDate = .now }
+                }
+                pendingDeleteTrip = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteTrip = nil }
         } message: { Text("You can restore this from Recently Deleted for 30 days.") }
         .confirmationDialog("Delete Invoice?", isPresented: Binding(
             get: { pendingDeleteInvoice != nil },

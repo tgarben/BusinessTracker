@@ -16,6 +16,10 @@ final class MileageTrip: SoftDeletable {
     var endAddress: String = ""
     var deletedDate: Date? = nil
 
+    /// Optional client this trip is associated with (for per-client reports / tax).
+    /// Inverse declared on `Client.mileageTrips` (nullify).
+    var client: Client? = nil
+
     // Automatic Drive Detection (Auto-Mileage, Phase 0). Auto-logged trips start
     // as needs-review so the user can categorize/confirm/delete them.
     var isAutoDetected: Bool = false

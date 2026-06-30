@@ -6,12 +6,14 @@ struct MileageView: View {
     @Query(filter: #Predicate<MileageTrip> { $0.deletedDate == nil && $0.isAutoDetected && $0.needsReview },
            sort: \MileageTrip.date, order: .reverse) private var reviewTrips: [MileageTrip]
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var showLogTrip = false
     @State private var showHistory = false
     @State private var showSettings = false
     @State private var editingTrip: MileageTrip?
     @State private var pendingDelete: ([MileageTrip], IndexSet)?
+    @AppStorage("mileage_reviewExpanded") private var reviewExpanded = true
 
     /// Trips shown in the normal day-grouped list — auto-detected drives awaiting
     /// review live in their own section until confirmed.
@@ -19,7 +21,9 @@ struct MileageView: View {
 
     private var monthTrips: [MileageTrip] {
         let start = Calendar.current.startOfMonth(for: .now)
-        return trips.filter { $0.date >= start }
+        // Exclude auto-detected drives still awaiting review — they shouldn't
+        // count toward miles/reimbursement until the user confirms them.
+        return trips.filter { $0.date >= start && !$0.needsReview }
     }
 
     private var monthMiles: Double        { monthTrips.reduce(0) { $0 + $1.miles } }
@@ -52,6 +56,7 @@ struct MileageView: View {
                 // Auto-detected drives awaiting review (Auto-Mileage)
                 if !reviewTrips.isEmpty {
                     Section {
+                        if reviewExpanded {
                         ForEach(reviewTrips) { trip in
                             VStack(alignment: .leading, spacing: 10) {
                                 TripRow(trip: trip)
@@ -91,11 +96,35 @@ struct MileageView: View {
                             }
                             .padding(.vertical, 2)
                         }
+                        }
                     } header: {
-                        Label("Drives to Review", systemImage: "car.circle.fill")
-                            .foregroundStyle(.orange)
+                        Button {
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                reviewExpanded.toggle()
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Label("Drives to Review", systemImage: "car.circle.fill")
+                                    .foregroundStyle(.orange)
+                                Text("\(reviewTrips.count)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.orange)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 1)
+                                    .background(.orange.opacity(0.15), in: Capsule())
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.orange)
+                                    .rotationEffect(.degrees(reviewExpanded ? 0 : -90))
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     } footer: {
-                        Text("Auto-detected drives. Confirm to keep, Categorize to set a purpose, or delete.")
+                        if reviewExpanded {
+                            Text("Auto-detected drives. Confirm to keep, Categorize to set a purpose, or delete.")
+                        }
                     }
                 }
 
@@ -310,6 +339,18 @@ struct TripRow: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(.blue.opacity(0.12), in: Capsule())
+                }
+                if let client = trip.client {
+                    HStack(spacing: 3) {
+                        Image(systemName: "person.fill")
+                        Text(client.name)
+                    }
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.teal)
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.teal.opacity(0.12), in: Capsule())
                 }
                 Spacer()
                 Text(String(format: "%.1f mi", trip.miles))

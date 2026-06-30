@@ -170,6 +170,7 @@ private struct CreateInvoiceContent: View {
 
     // Business invoicing defaults
     @AppStorage("business_defaultTaxRate") private var defaultTaxRate: Double = 0
+    @AppStorage("business_taxID") private var businessTaxID: String = ""
     @AppStorage("business_defaultPaymentTerms") private var defaultPaymentTerms: String = "Due Upon Receipt"
     @AppStorage("business_acceptedPayments") private var defaultAcceptedPayments: String = ""
     @AppStorage("business_paymentInstructions") private var defaultPaymentInstructions: String = ""
@@ -187,6 +188,7 @@ private struct CreateInvoiceContent: View {
     @State private var paymentInstructions: String = ""
     @State private var poNumber: String = ""
     @State private var notes: String = ""
+    @State private var includeTaxID: Bool = true
     @State private var didPrefill = false
     @State private var preview: PreviewDoc?
 
@@ -412,6 +414,14 @@ private struct CreateInvoiceContent: View {
                 TextField("Thank-you message or notes…", text: $notes, axis: .vertical)
                     .lineLimit(3...6)
             }
+
+            if !businessTaxID.isEmpty {
+                Section {
+                    Toggle("Include Tax ID / EIN", isOn: $includeTaxID)
+                } footer: {
+                    Text("Prints your Tax ID / EIN (\(businessTaxID)) in the document footer. Turn off to omit it from this invoice.")
+                }
+            }
         }
         .navigationTitle("New Invoice")
         .navigationSubtitle(client.name)
@@ -503,6 +513,7 @@ private struct CreateInvoiceContent: View {
         invoice.acceptedPayments = acceptedPayments
         invoice.paymentInstructions = paymentInstructions
         invoice.poNumber = poNumber
+        invoice.includeTaxID = includeTaxID
         modelContext.insert(invoice)
 
         for entry in clientTimeEntries where selectedEntryIDs.contains(entry.persistentModelID) {
@@ -757,6 +768,7 @@ struct InvoiceDetailView: View {
         new.acceptedPayments = invoice.acceptedPayments
         new.paymentInstructions = invoice.paymentInstructions
         new.poNumber = invoice.poNumber
+        new.includeTaxID = invoice.includeTaxID
         modelContext.insert(new)
         for item in (invoice.lineItems ?? []).sorted(by: { $0.sortOrder < $1.sortOrder }) {
             modelContext.insert(InvoiceLineItem(
@@ -971,7 +983,8 @@ func makeInvoicePDF(invoice: Invoice, userName: String) -> URL? {
         paymentInstructions: invoice.paymentInstructions,
         paymentLink: business.paymentLink,
         notes: invoice.notes,
-        showAcceptanceLine: false
+        showAcceptanceLine: false,
+        showTaxID: invoice.includeTaxID
     )
     return makeDocumentPDF(spec: spec)
 }

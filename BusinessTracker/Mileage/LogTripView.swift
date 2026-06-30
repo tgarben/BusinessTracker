@@ -24,11 +24,13 @@ struct LogTripView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MileagePreset.sortOrder) private var mileagePresets: [MileagePreset]
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
 
     @State private var entryMode: MileageEntryMode = .address
     @State private var date: Date = .now
     @State private var purpose: String = ""
     @State private var notes: String = ""
+    @State private var selectedClient: Client?
     @AppStorage("mileage_ratePerMile") private var savedRate: Double = MileageTrip.defaultRatePerMile
     @State private var ratePerMile: Double = MileageTrip.defaultRatePerMile
     @State private var isRoundTrip = false
@@ -86,6 +88,14 @@ struct LogTripView: View {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                     TextField("Category (e.g. Client visit)", text: $purpose)
                     PurposeChipsRow(purpose: $purpose)
+                    if !clients.isEmpty {
+                        Picker("Client", selection: $selectedClient) {
+                            Text("None").tag(Optional<Client>.none)
+                            ForEach(clients) { client in
+                                Text(client.name).tag(Optional(client))
+                            }
+                        }
+                    }
                 }
 
                 Section("Distance") {
@@ -331,6 +341,7 @@ struct LogTripView: View {
     private func applyPreset(_ preset: MileagePreset) {
         if !preset.purpose.isEmpty { purpose = preset.purpose }
         if !preset.notes.isEmpty { notes = preset.notes }
+        if let presetClient = preset.client { selectedClient = presetClient }
         // Fill manual fields as a reliable fallback
         manualStartLocation = preset.startLocation
         manualEndLocation = preset.endLocation
@@ -382,6 +393,7 @@ struct LogTripView: View {
             trip.startAddress = manualStartLocation
             trip.endAddress = manualEndLocation
         }
+        trip.client = selectedClient
         modelContext.insert(trip)
         dismiss()
     }

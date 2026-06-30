@@ -9,6 +9,7 @@ private enum MileageEditMode: String, CaseIterable {
 
 struct MileageTripEditView: View {
     @Environment(\.dismiss) private var dismiss
+    @Query(filter: #Predicate<Client> { $0.deletedDate == nil }, sort: \Client.name) private var clients: [Client]
     let trip: MileageTrip
 
     @State private var editMode: MileageEditMode = .manual
@@ -16,6 +17,7 @@ struct MileageTripEditView: View {
     @State private var purpose: String
     @State private var notes: String
     @State private var ratePerMile: Double
+    @State private var selectedClient: Client?
 
     // Manual mode
     @State private var manualStart: String
@@ -43,6 +45,7 @@ struct MileageTripEditView: View {
         _purpose = State(initialValue: trip.purpose)
         _notes = State(initialValue: trip.notes)
         _ratePerMile = State(initialValue: MileageTrip.ratePerMile)
+        _selectedClient = State(initialValue: trip.client)
         _manualStart = State(initialValue: trip.startLocation)
         _manualEnd = State(initialValue: trip.endLocation)
         _manualMiles = State(initialValue: trip.miles)
@@ -100,6 +103,14 @@ struct MileageTripEditView: View {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                     TextField("Category", text: $purpose)
                     PurposeChipsRow(purpose: $purpose)
+                    if !clients.isEmpty {
+                        Picker("Client", selection: $selectedClient) {
+                            Text("None").tag(Optional<Client>.none)
+                            ForEach(clients) { client in
+                                Text(client.name).tag(Optional(client))
+                            }
+                        }
+                    }
                 }
 
                 if isTracked {
@@ -295,6 +306,7 @@ struct MileageTripEditView: View {
         trip.date = date
         trip.purpose = purpose.isEmpty ? "Business trip" : purpose
         trip.notes = notes
+        trip.client = selectedClient
         // For a GPS-tracked trip, leave the captured start/end/miles/route alone.
         if !isTracked {
             trip.startLocation = resolvedStart

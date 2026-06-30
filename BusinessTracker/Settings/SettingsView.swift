@@ -703,7 +703,9 @@ struct SettingsView: View {
                     Text("Quick-fill chips and saved templates for logging trips and expenses faster. Turn on Instant-Log on an individual expense preset (in Expense Presets) to log it immediately from the Expenses + menu.")
                 }
 
-                // MARK: Automatic Mileage (Beta)
+                // MARK: Automatic Mileage (Beta) — SHELVED for 1.0 (DriveDetector.featureEnabled).
+                // Section hidden so the feature can't be enabled; flip the flag to restore.
+                if DriveDetector.featureEnabled {
                 Section {
                     Toggle(isOn: $autoDetectEnabled) {
                         HStack(spacing: 10) {
@@ -751,6 +753,7 @@ struct SettingsView: View {
                 } footer: {
                     Text("Beta — detects and logs your drives automatically in the background so you don't have to start a trip. Requires \u{201C}Always\u{201D} location access; turn off anytime. Auto-logged drives appear in Mileage for you to review and categorize. To avoid duplicates, only one device logs drives at a time — others still see them.")
                 }
+                } // end DriveDetector.featureEnabled gate
 
                 // MARK: Data Export
                 Section {
@@ -1156,7 +1159,7 @@ struct SettingsView: View {
 
     private func mileageRows() -> [String] {
         let fmt = csvDateFormatter
-        var rows = ["=== MILEAGE TRIPS ===", "Date,From Address,To Address,Stops,Miles,Rate,Reimbursement,Purpose,Notes"]
+        var rows = ["=== MILEAGE TRIPS ===", "Date,From Address,To Address,Stops,Miles,Rate,Reimbursement,Purpose,Client,Notes"]
         for t in trips where inExportRange(t.date) {
             rows.append([
                 csvField(fmt.string(from: t.date)),
@@ -1167,6 +1170,7 @@ struct SettingsView: View {
                 csvField(String(format: "%.3f", MileageTrip.ratePerMile)),
                 csvField(String(format: "%.2f", t.reimbursementAmount)),
                 csvField(t.purpose),
+                csvField(t.client?.name ?? ""),
                 csvField(t.notes)
             ].joined(separator: ","))
         }

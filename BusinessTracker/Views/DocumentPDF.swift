@@ -58,6 +58,7 @@ struct DocumentPDFSpec {
     var paymentLink: String = ""     // optional "pay online" URL printed in the payment block
     let notes: String
     let showAcceptanceLine: Bool     // estimates add an Accepted By / Date line
+    var showTaxID: Bool = true       // print the business Tax ID / EIN in the footer (per-document toggle)
 }
 
 // MARK: - Shared helpers
@@ -190,7 +191,8 @@ private func docPDFFooter(spec: DocumentPDFSpec) -> some View {
         .padding(.bottom, 18)
 
         let hasPayment = !spec.paymentTerms.isEmpty || !spec.acceptedPayments.isEmpty || !spec.paymentInstructions.isEmpty || !spec.paymentLink.isEmpty
-        if hasPayment || !spec.notes.isEmpty || !spec.business.taxID.isEmpty {
+        let showTax = spec.showTaxID && !spec.business.taxID.isEmpty
+        if hasPayment || !spec.notes.isEmpty || showTax {
             docPDFDivider()
             VStack(alignment: .leading, spacing: 10) {
                 if hasPayment {
@@ -216,7 +218,7 @@ private func docPDFFooter(spec: DocumentPDFSpec) -> some View {
                         Text(spec.notes).font(.system(size: 11)).foregroundColor(Color(white: 0.4))
                     }
                 }
-                if !spec.business.taxID.isEmpty {
+                if showTax {
                     Text("Tax ID / EIN: \(spec.business.taxID)")
                         .font(.system(size: 9)).foregroundColor(Color(white: 0.55))
                 }

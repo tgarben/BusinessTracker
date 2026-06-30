@@ -149,7 +149,7 @@ struct ReportsView: View {
     // MARK: - Range aggregates
 
     private var monthEntries: [TimeEntry]     { timeEntries.filter { inRange($0.date) } }
-    private var monthTrips: [MileageTrip]     { trips.filter { inRange($0.date) } }
+    private var monthTrips: [MileageTrip]     { trips.filter { inRange($0.date) && !$0.needsReview } }
     private var monthExpenses: [Expense]      { expenses.filter { inRange($0.date) } }
     private var monthIncome: [IncomeEntry]    { incomeEntries.filter { inRange($0.date) } }
 
